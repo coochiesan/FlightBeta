@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- Pinch to zoom is deliberately allowed (.114): the scale limits were dropped after the beta trial. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Flight">
@@ -14,11 +15,6 @@ if (location.pathname.indexOf('/FlightBeta') === 0) {
   document.title = 'Flight Plan (Beta)';
   var _amt = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (_amt) _amt.setAttribute('content', 'Flight Beta');
-  // .113 trial, beta only: drop maximum-scale/user-scalable so iOS allows pinch
-  // zoom. Done here, while the head is still parsing, so it applies before the
-  // first layout. Live Flight keeps pinch disabled.
-  var _vp = document.querySelector('meta[name="viewport"]');
-  if (_vp) _vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 </script>
 <style>
@@ -34,7 +30,37 @@ if (location.pathname.indexOf('/FlightBeta') === 0) {
   --purple:#a855f7;--purple-l:#2d1a4a;
   --red:#ef4444;--red-l:#3d1414;
   --teal:#14b8a6;--teal-l:#0d332f;
-  --pink:#ec4899;--pink-l:#3d1229;
+  --pink:#ec4899;
+  /* Layover/protocol timeline event palette (.116). These are CATEGORY colours,
+     not status colours, and are deliberately kept apart from the status pair
+     (amber, red). Amber earns its meaning as a heads-up by being rare, so a
+     preset can retune the status colours without dragging the timeline along.
+     ev-wake was a second amber (#f59e0b) and is cyan now, so amber reads as
+     caution only. ev-meal still carries the same value as the amber variable
+     but is no longer tied to it, so the two can diverge whenever wanted. */
+  --ev-checkin:#3b82f6;
+  --ev-meal:#f97316;
+  --ev-workout:#10b981;
+  --ev-sleep:#7c3aed;
+  --ev-wake:#22d3ee;
+  --ev-alarm:#ef4444;
+  --ev-stack:#14b8a6;
+  --ev-winddown:#ec4899;
+  --ev-caffeine:#84cc16;
+  --ev-arrival:#a855f7;
+  --ev-neutral:#8892a4;
+  /* Foreground on a filled accent (.117). Was 33 hard-coded #fff plus a pair of
+     #000 on amber. A theme that removes white needs one place to change it. */
+  --on-accent:#fff;
+  --on-warn:#000;
+  --now-marker:#fff;
+  --banner-ok:#1e7f3c;
+  /* Pop-up surfaces (.117). Two helpers built these from their own
+     isLight ? light : dark ternaries, which only ever knew two themes. */
+  --pop-bg:#1a1d23;
+  --pop-border:#2a3340;
+  --pop-btn:#185fa5;
+  --pink-l:#3d1229;
   --radius:10px;--radius-sm:6px;
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bot:env(safe-area-inset-bottom,0px);
@@ -50,6 +76,69 @@ body.light{
   --red:#A32D2D;--red-l:#FCEBEB;
   --teal:#0F6E56;--teal-l:#E1F5EE;
   --pink:#993556;--pink-l:#FBEAF0;
+  --pop-bg:#FFFFFF;
+  --pop-border:#E2DFD6;
+  /* The event palette had never been given light values, so the timeline dots
+     sat at 1.6-3.6:1 on cream. Same hues, dark enough to read. (.118) */
+  --ev-checkin:#185FA5;--ev-meal:#A33E00;--ev-workout:#2F6B12;--ev-sleep:#4B2E9E;
+  --ev-wake:#0E6E7D;--ev-alarm:#A32D2D;--ev-stack:#0F6E56;--ev-winddown:#993556;
+  --ev-caffeine:#4F6B0A;--ev-arrival:#6B2FAF;--ev-neutral:#5F5E5A;
+}
+
+/* ── Theme presets (.118) ─────────────────────────────────────────────────────
+   Four presets, each a block of custom-property overrides. No class = Dark 1
+   (the :root defaults, unchanged). The two light-ish presets also carry the
+   .light class, so every bit of code that asks "is this a light theme?" keeps
+   working and backdrop opacities stay right. These blocks follow body.light in
+   source order and share its specificity, so they win where they overlap.
+
+   High Contrast is for a sun-washed flight deck: white ground, black text, mid
+   greys stripped out, borders heavy, accents darkened enough to read on white.
+
+   Dark 2 removes light from everything that is NOT telling you something. The
+   neutrals go to near-black and the text drops to a dim grey, but red, amber
+   and green keep their Dark 1 values: those two in particular converge as
+   luminance falls, and they are the pair that has to stay separable at 0300.
+   The event palette is dimmed, because categories are not warnings. The white
+   that sat on filled buttons becomes near-black via --on-accent. */
+
+body.light.theme-hc{
+  --bg:#FFFFFF;--surf:#FFFFFF;--surf2:#F2F2F2;--surf3:#E4E4E4;
+  --border:#9A9A9A;--border2:#6B6B6B;
+  --text:#000000;--text2:#1F1F1F;--text3:#4A4A4A;
+  --blue:#0B4F9E;--blue-l:#DCE9F7;--blue-ll:#B7D3F0;
+  --green:#1C5A10;--green-l:#DDEBD6;
+  --amber:#A3540A;--amber-l:#F7E6D5;
+  --purple:#3F2E9E;--purple-l:#E2DEF6;
+  --red:#8B1A1A;--red-l:#F6DADA;
+  --teal:#0A5244;--teal-l:#D6E9E4;
+  --pink:#7A1F3D;--pink-l:#F4DAE2;
+  --on-accent:#FFFFFF;--on-warn:#FFFFFF;
+  --now-marker:#000000;--banner-ok:#0E5C2B;
+  --pop-bg:#FFFFFF;--pop-border:#6B6B6B;--pop-btn:#0B4F9E;
+  --ev-checkin:#0B4F9E;--ev-meal:#A33E00;--ev-workout:#1C5A10;--ev-sleep:#4B2E9E;
+  --ev-wake:#00606E;--ev-alarm:#8B1A1A;--ev-stack:#0A5244;--ev-winddown:#7A1F3D;
+  --ev-caffeine:#3F5A00;--ev-arrival:#5B2E9E;--ev-neutral:#4A4A4A;
+}
+body.light.theme-hc .card,body.light.theme-hc .tz-block{border-width:2px}
+
+body.theme-dark2{
+  --bg:#000000;--surf:#070809;--surf2:#0C0E11;--surf3:#121519;
+  --border:#15181D;--border2:#23272E;
+  --text:#8A94A3;--text2:#5C6675;--text3:#3C4350;
+  --blue:#357FE0;--blue-l:#0B1A2C;--blue-ll:#070F1A;
+  --green:#10B981;--green-l:#06251B;
+  --amber:#F97316;--amber-l:#2A1405;
+  --purple:#8B4BD8;--purple-l:#190E2A;
+  --red:#EF4444;--red-l:#2A0D0D;
+  --teal:#11998B;--teal-l:#07211E;
+  --pink:#C43C80;--pink-l:#260A18;
+  --on-accent:#0A0A0A;--on-warn:#0A0A0A;
+  --now-marker:#6B7280;--banner-ok:#0F4A24;
+  --pop-bg:#07090B;--pop-border:#1C2026;--pop-btn:#123A63;
+  --ev-checkin:#2A5C96;--ev-meal:#8F4A14;--ev-workout:#15795A;--ev-sleep:#5A3A94;
+  --ev-wake:#1A7F8C;--ev-alarm:#9B2F2F;--ev-stack:#11685E;--ev-winddown:#8A3059;
+  --ev-caffeine:#4E6B14;--ev-arrival:#6A3F9C;--ev-neutral:#4A5260;
 }
 html,body{height:100%;height:100dvh;margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:10px;overflow:hidden;position:fixed;width:100%}
 
@@ -228,16 +317,16 @@ function showUpdateBanner() {
   if (document.getElementById('update-banner')) return;
   const b = document.createElement('div');
   b.id = 'update-banner';
-  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#1e7f3c;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:sans-serif;font-size:15px;font-weight:700;box-shadow:0 -2px 12px rgba(0,0,0,0.4)';
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:var(--banner-ok);color:var(--on-accent);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:sans-serif;font-size:15px;font-weight:700;box-shadow:0 -2px 12px rgba(0,0,0,0.4)';
   b.innerHTML = '<span>New version available</span>';
   const info = document.createElement('button');   // what changed (.108)
   info.textContent = 'i';
-  info.style.cssText = 'width:30px;height:30px;flex-shrink:0;margin-left:auto;border-radius:50%;border:2px solid #fff;background:transparent;color:#fff;font-size:15px;font-weight:800;font-style:italic;cursor:pointer';
+  info.style.cssText = 'width:30px;height:30px;flex-shrink:0;margin-left:auto;border-radius:50%;border:2px solid var(--on-accent);background:transparent;color:var(--on-accent);font-size:15px;font-weight:800;font-style:italic;cursor:pointer';
   info.addEventListener('click', () => { if (typeof showUpdateNotes === 'function') showUpdateNotes(); });
   b.appendChild(info);
   const btn = document.createElement('button');
   btn.textContent = 'Reload now';
-  btn.style.cssText = 'padding:8px 16px;border-radius:8px;border:none;background:#fff;color:#1e7f3c;font-size:15px;font-weight:800;cursor:pointer';
+  btn.style.cssText = 'padding:8px 16px;border-radius:8px;border:none;background:var(--on-accent);color:var(--banner-ok);font-size:15px;font-weight:800;cursor:pointer';
   btn.addEventListener('click', () => location.reload(true));
   b.appendChild(btn);
   document.body.appendChild(b);
@@ -341,7 +430,24 @@ function loadState() {
   if (!state.oceanicNotesByTheatre) state.oceanicNotesByTheatre = {};
   migrateNotesToGlobalStores();
   migrateOceanicNotesToGlobalStore();
-  if (state.theme === 'light') applyTheme('light');
+  // .118 - the theme moved out of flight state into flight_ui_prefs. Read any
+  // old value once so nobody loses their setting, then drop it. Written
+  // straight to storage rather than through setUiPref, which would re-render
+  // before the first render has happened.
+  try {
+    const q = uiPrefs();
+    if (q.theme === undefined && state.theme !== undefined) {
+      q.theme = state.theme === 'light' ? 'day' : 'dark1';
+      localStorage.setItem(UI_PREFS_KEY, JSON.stringify(q));
+    }
+  } catch (e) {}
+  if (state.theme !== undefined) { delete state.theme; saveState(); }
+  applyTheme(themePreset().id);
+  // .115 - Phone mode is session-only. Someone who left it on last time should
+  // not open the app to a layout they did not choose and cannot account for, so
+  // it always starts in iPad mode and the key is dropped from saved state
+  // rather than carried forward.
+  if (state.phoneMode) { delete state.phoneMode; saveState(); }
 }
 
 // One-time migration: Departure/Arrival Notes used to live inside each
@@ -388,23 +494,39 @@ function migrateOceanicNotesToGlobalStore() {
   saveState();
 }
 
-function toggleTheme() {
-  const next = document.body.classList.contains('light') ? 'dark' : 'light';
-  applyTheme(next);
-  state.theme = next;
-  saveState();
+// ── Theme presets (.118) ────────────────────────────────────────────────────
+// Device-level, kept in flight_ui_prefs rather than flight state: the theme
+// belongs to this iPad, and flight state travels on a Share.
+// The two light-ish presets carry the .light class as well as their own, so
+// every bit of code that asks "is this a light theme?" still gets the right
+// answer. cls is applied in order; the CSS blocks sit after body.light.
+const THEME_PRESETS = [
+  { id:'dark1', name:'Dark 1',   cls:'',               meta:'#0a0c0f' },
+  { id:'day',   name:'Day',      cls:'light',          meta:'#F5F4F0' },
+  { id:'hc',    name:'Contrast', cls:'light theme-hc', meta:'#FFFFFF' },
+  { id:'dark2', name:'Dark 2',   cls:'theme-dark2',    meta:'#000000' },
+];
+function themePreset() {
+  const id = uiPrefs().theme;
+  return THEME_PRESETS.find(p => p.id === id) || THEME_PRESETS[0];
 }
-
-function applyTheme(t) {
-  const btn = document.getElementById('theme-toggle');
-  if (t === 'light') {
-    document.body.classList.add('light');
-    if (btn) btn.textContent = 'Dark';
-  } else {
-    document.body.classList.remove('light');
-    if (btn) btn.textContent = 'Light';
-  }
+function applyTheme(id) {
+  // 'light' and 'dark' still accepted, so an old stored value or an old call
+  // site lands on the right preset instead of silently doing nothing.
+  const want = id === 'light' ? 'day' : id === 'dark' ? 'dark1' : id;
+  const p = THEME_PRESETS.find(x => x.id === want) || THEME_PRESETS[0];
+  const b = document.body;
+  b.classList.remove('light', 'theme-hc', 'theme-dark2');
+  if (p.cls) p.cls.split(' ').forEach(c => b.classList.add(c));
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', p.meta);   // iOS status bar follows the theme
 }
+function setTheme(id) { setUiPref('theme', id); applyTheme(id); }
+function cycleTheme() {
+  const i = THEME_PRESETS.indexOf(themePreset());
+  setTheme(THEME_PRESETS[(i + 1) % THEME_PRESETS.length].id);
+}
+function toggleTheme() { cycleTheme(); }   // kept: older call sites still use this name
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 // Return/Enter ends editing in any single-line box (and the ATIS paste
@@ -557,11 +679,11 @@ function freqBlockHtml(page, title, fields, inline) {
 }
 
 // -- Protocol sync --
-const APP_BUILD = '2026-11-21.113' + (IS_BETA ? '-beta' : '');
+const APP_BUILD = '2026-11-21.118' + (IS_BETA ? '-beta' : '');
 // Shown by the i button on the update banner. The banner fetches these notes
 // out of the INCOMING index.html, so they always describe the build you are
 // about to load. Keep it short, plain, and free of apostrophes (.108).
-const BUILD_NOTES = 'Two ways to get the text bigger, so you can judge which one works.\n\nThe gear menu has a new Text row: tap it to cycle 100, 115 and 130 per cent. It scales the page content only. The header and the tab bar stay where they are, and pop-up cards and cheat sheets are not scaled in this build.\n\nThe beta build also allows pinch to zoom, which this one does not. Pinch magnifies the whole screen rather than reflowing anything, so watch what it does to the header and to full-screen cards.';
+const BUILD_NOTES = 'Four colour themes. Tap Theme in the gear menu to cycle them.\n\nDark 1 is the scheme you have been flying, unchanged. Dark 2 takes the light out of everything that is not telling you something: near-black surfaces, dimmed text, and the white gone from filled buttons - but red, amber and green keep their brightness, because those two in particular get hard to tell apart as things dim. Day is for a hotel room. Contrast is for bright sun: white ground, black text, the mid greys stripped out and heavier borders.\n\nThe theme is now a setting on this iPad rather than part of the flight, so it no longer travels when you share a flight.';
 const PROTOCOL_SYNC_URL = 'https://protocol-sync.coochiesan.workers.dev';
 // Private CORS proxy (Cloudflare Worker, build .90). corsproxy.io began
 // answering HTTP 401 to unauthenticated requests (17 Oct 2026), which took
@@ -699,14 +821,14 @@ function updateClock() {
 
 // ── Protocol data ──────────────────────────────────────────────────────────
 const LAYOVER_TIMELINE = [
-  { bst:'13:50', pdt:'05:50', color:'#3b82f6', title:'Hotel check-in', sub:'Scenario A (aircraft sleep): horizontal rest only — do NOT attempt to sleep\nScenario B (no aircraft sleep): 90-min timed nap — set TWO alarms', alertKey:'checkin' },
-  { bst:'~14:00', pdt:'~06:00', color:'#a855f7', title:'Arrival protocol', sub:'Hydrate aggressively · eat · see sleep stack below', alertKey:'waking_doses' },
-  { bst:'~15:30', pdt:'~07:30', color:'#f59e0b', title:'[Scenario B] Force wake from nap', sub:'Get up immediately — do NOT snooze · cold water on face · stay upright · inertia clears in 10–15 min', alertKey:'nap_wake' },
-  { bst:'17:00–18:00', pdt:'09:00–10:00', color:'#10b981', title:'Zone 2 outdoors 40–50 min', sub:'Optimal body-clock window · cortisol aligned · daylight exposure anchors home clock · NOT intervals', alertKey:'workout' },
-  { bst:'~19:00', pdt:'~11:00', color:'#ec4899', title:'Hot shower 10–15 min', sub:'Core temp rebound targets 20:30 BST sleep onset · hot water drives core temp drop for sleep onset', alertKey:'shower' },
-  { bst:'19:30–20:30', pdt:'11:30–12:30', color:'#14b8a6', title:'Protein meal + evening protocol', sub:'Glycine 3g · L-Theanine 200mg · Apigenin 50mg', alertKey:'eve_protocol' },
-  { bst:'20:30', pdt:'12:30', color:'#7c3aed', title:'SLEEP — target 7+ hours', sub:'Mag glycinate 400mg · blackout + eye mask + earplugs · alarm 04:00–04:15 BST · three sleep drivers aligned', alertKey:'sleep' },
-  { bst:'04:00–04:15', pdt:'20:00 (prev)', color:'#f59e0b', title:'Wake — departure prep', sub:'Light breakfast · leave hotel 06:00 BST', alertKey:'wake_depart' },
+  { bst:'13:50', pdt:'05:50', color:'var(--ev-checkin)', title:'Hotel check-in', sub:'Scenario A (aircraft sleep): horizontal rest only — do NOT attempt to sleep\nScenario B (no aircraft sleep): 90-min timed nap — set TWO alarms', alertKey:'checkin' },
+  { bst:'~14:00', pdt:'~06:00', color:'var(--ev-arrival)', title:'Arrival protocol', sub:'Hydrate aggressively · eat · see sleep stack below', alertKey:'waking_doses' },
+  { bst:'~15:30', pdt:'~07:30', color:'var(--ev-wake)', title:'[Scenario B] Force wake from nap', sub:'Get up immediately — do NOT snooze · cold water on face · stay upright · inertia clears in 10–15 min', alertKey:'nap_wake' },
+  { bst:'17:00–18:00', pdt:'09:00–10:00', color:'var(--ev-workout)', title:'Zone 2 outdoors 40–50 min', sub:'Optimal body-clock window · cortisol aligned · daylight exposure anchors home clock · NOT intervals', alertKey:'workout' },
+  { bst:'~19:00', pdt:'~11:00', color:'var(--ev-winddown)', title:'Hot shower 10–15 min', sub:'Core temp rebound targets 20:30 BST sleep onset · hot water drives core temp drop for sleep onset', alertKey:'shower' },
+  { bst:'19:30–20:30', pdt:'11:30–12:30', color:'var(--ev-stack)', title:'Protein meal + evening protocol', sub:'Glycine 3g · L-Theanine 200mg · Apigenin 50mg', alertKey:'eve_protocol' },
+  { bst:'20:30', pdt:'12:30', color:'var(--ev-sleep)', title:'SLEEP — target 7+ hours', sub:'Mag glycinate 400mg · blackout + eye mask + earplugs · alarm 04:00–04:15 BST · three sleep drivers aligned', alertKey:'sleep' },
+  { bst:'04:00–04:15', pdt:'20:00 (prev)', color:'var(--ev-wake)', title:'Wake — departure prep', sub:'Light breakfast · leave hotel 06:00 BST', alertKey:'wake_depart' },
 ];
 
 // ── Rendering ──────────────────────────────────────────────────────────────
@@ -722,12 +844,12 @@ function groupBy(arr, key) {
 // ── Init ────────────────────────────────────────────────────────────────────
 function togglePhoneMode() {
   state.phoneMode = !state.phoneMode;
-  saveState();
+  // Deliberately not saved (.115): the choice lasts for this session only.
   const btn = document.getElementById('phone-mode-btn');
   if (btn) {
     btn.textContent = state.phoneMode ? 'iPad' : 'Phone';
     btn.style.background   = state.phoneMode ? 'var(--blue)'    : 'var(--surf2)';
-    btn.style.color        = state.phoneMode ? '#fff'           : 'var(--text2)';
+    btn.style.color        = state.phoneMode ? 'var(--on-accent)'           : 'var(--text2)';
     btn.style.borderColor  = state.phoneMode ? 'var(--blue)'    : 'var(--border2)';
   }
   render();
@@ -814,34 +936,15 @@ function setUiPref(k, v) {
   try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
   if (typeof render === 'function') render();
 }
-// ── Content zoom (.113) ───────────────────────────────────────────────────
-// The shell is deliberately fixed height: #app is pinned to the four viewport
-// edges with #header and #nav as flex-shrink:0 and #content as the only
-// scrolling slot. Zooming #app, body or #content itself scales the slot and
-// pushes the nav bar off screen, which would leave the gear menu unreachable.
-// So the zoom goes on #content's CHILDREN, inside the scroller, with their
-// width divided back down so the scaled result still measures one screen wide
-// and nothing scrolls sideways.
-const ZOOM_STEPS = [100, 115, 130];
-function contentZoom() {
-  const z = parseInt(uiPrefs().zoom, 10);
-  return ZOOM_STEPS.indexOf(z) >= 0 ? z : 100;
-}
-function applyContentZoom() {
-  const c = document.getElementById('content'); if (!c) return;
-  const z = contentZoom();
-  const zv = z === 100 ? '' : String(z / 100);
-  const wv = z === 100 ? '' : (10000 / z).toFixed(4) + '%';
-  for (let i = 0; i < c.children.length; i++) {
-    const el = c.children[i];
-    el.style.zoom = zv;
-    el.style.width = wv;
-  }
-}
-function cycleContentZoom() {
-  const i = ZOOM_STEPS.indexOf(contentZoom());
-  setUiPref('zoom', ZOOM_STEPS[(i + 1) % ZOOM_STEPS.length]);
-}
+// .114 one-time cleanup: the .113 text-zoom trial stored a step under 'zoom'.
+// Pinch replaced it, so drop the key rather than leave a stale number that a
+// later pref of the same name could inherit with different meaning.
+(function () {
+  try {
+    const p = uiPrefs();
+    if (p.zoom !== undefined) { delete p.zoom; localStorage.setItem(UI_PREFS_KEY, JSON.stringify(p)); }
+  } catch (e) {}
+})();
 // The label's own text, without any trailing span the app appends for
 // context (type tag, city, scenario) and without a ' \u00b7 ' suffix.
 function helpLabelText(el) {
@@ -1152,12 +1255,10 @@ function showSetupMenu() {
     r.appendChild(txt); r.appendChild(b);
     return r;
   };
-  pop.appendChild(rowAct('Theme', 'Dark for the flight deck at night, light for daylight.',
-    document.body.classList.contains('light'), 'Light', 'Dark', () => toggleTheme()));
+  pop.appendChild(rowAct('Theme', 'Dark 1 for the flight deck, Dark 2 dimmer still with the white taken out, Day for a hotel room, Contrast for bright sun.',
+    true, themePreset().name, themePreset().name, () => cycleTheme()));
   pop.appendChild(rowAct('Layout', 'Phone replaces the tabs with one large-text summary card.',
     !!state.phoneMode, 'Phone', 'iPad', () => togglePhoneMode()));
-  pop.appendChild(rowAct('Text', 'Scales the page content. The header and tab bar stay put; pop-up cards and cheat sheets are not scaled yet.',
-    true, contentZoom() + '%', contentZoom() + '%', () => cycleContentZoom()));
   const cov = document.createElement('div');
   cov.style.cssText = 'font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;line-height:1.5';
   cov.textContent = 'This page: ' + UI_COVERAGE.labels + ' labels and ' + UI_COVERAGE.buttons + ' buttons with cards, ' + UI_COVERAGE.gaps + ' labels without. ' + Object.keys(HELP_CARDS).length + ' cards written.';
@@ -1178,7 +1279,7 @@ function render() {
   if (btn) {
     btn.textContent = state.phoneMode ? 'iPad' : 'Phone';
     btn.style.background  = state.phoneMode ? 'var(--blue)'   : 'var(--surf2)';
-    btn.style.color       = state.phoneMode ? '#fff'          : 'var(--text2)';
+    btn.style.color       = state.phoneMode ? 'var(--on-accent)'          : 'var(--text2)';
     btn.style.borderColor = state.phoneMode ? 'var(--blue)'   : 'var(--border2)';
   }
   if (state.phoneMode) { renderPhoneMode(c); return; }
@@ -1193,7 +1294,6 @@ function render() {
   setTimeout(() => { if (typeof updateAtisAges === 'function') updateAtisAges(); }, 0);   // ATIS age badges (.91)
   { const hf = document.getElementById('hdr-flight');   // centred flight title (.109)
     if (hf) { const f = currentFlight(); hf.textContent = (f && f.flightNum) ? 'American ' + f.flightNum : 'American \u2014'; } }
-  applyContentZoom();   // text size (.113)
   uiApply();   // help markers + simplified fields (.106)
 }
 
@@ -1478,27 +1578,27 @@ function renderLayover(c) {
   const noteIfEarly  = lm => afterCheckin(lm) ? ' · NOTE: prep before hotel arrival if possible' : '';
 
   // ── Shared wind-down events (same for all scenarios) ─────────────────────
-  const showerEvent = { key:'shower', lm: effSl-90, label:'Wind down · Hot shower · Screens off', color:'#ec4899',
+  const showerEvent = { key:'shower', lm: effSl-90, label:'Wind down · Hot shower · Screens off', color:'var(--ev-winddown)',
     sub:'90 min before sleep · hot shower → core temp drop → speeds sleep onset · screens off · dim lights' + noteIfEarly(effSl-90) };
-  const stackEvent  = { key:'eve_protocol', lm: effSl-60, label:'Pre-sleep stack', color:'#14b8a6',
+  const stackEvent  = { key:'eve_protocol', lm: effSl-60, label:'Pre-sleep stack', color:'var(--ev-stack)',
     sub:'Mag glycinate 400mg · Glycine 3g · L-Theanine 200mg · Apigenin 50mg' +
         (needsMelatonin ? ' · 0.5mg melatonin (body clock '+pdtOf(effSl-60)+' — phase-shifting dose)' : ' · skip melatonin — body clock near sleep phase') +
         noteIfEarly(effSl-60) };
-  const sleepEvent  = { key:'sleep', lm: effSl, label:'Sleep — target 8hrs · WOCL aligned', color:'#7c3aed',
+  const sleepEvent  = { key:'sleep', lm: effSl, label:'Sleep — target 8hrs · WOCL aligned', color:'var(--ev-sleep)',
     sub:'Body clock ' + bodyClockSleepStr + ' · ' + woclNote };
-  const wakeEvent   = { key:'wake_depart', lm: wakeMin, label:'Wake', color:'#f59e0b',
+  const wakeEvent   = { key:'wake_depart', lm: wakeMin, label:'Wake', color:'var(--ev-wake)',
     sub:'Light meal' };
-  const prepEvent   = { key:'prepare', lm: prepAbs, label:'Prepare for pickup', color:'#f59e0b',
+  const prepEvent   = { key:'prepare', lm: prepAbs, label:'Prepare for pickup', color:'var(--ev-wake)',
     sub:'Pack for departure · 60 min before pickup' };
-  const pickupEvent = { key:'pickup', lm: pickupAbs, label:`Hotel pickup${pickupDate?' · '+pickupDate:''}`, color:'#ef4444', sub:'' };
-  const cafEvent    = { key:'caffeine_stop', lm: caffeineStop, label:'Caffeine cutoff', color:'#84cc16',
+  const pickupEvent = { key:'pickup', lm: pickupAbs, label:`Hotel pickup${pickupDate?' · '+pickupDate:''}`, color:'var(--ev-alarm)', sub:'' };
+  const cafEvent    = { key:'caffeine_stop', lm: caffeineStop, label:'Caffeine cutoff', color:'var(--ev-caffeine)',
     sub:'6 hrs before sleep · half-life 5–6 hrs · stopping here protects sleep onset and slow-wave depth' +
         (caffeineStop < (checkinMin||0) ? ' · NOTE: stop before hotel arrival' : '') };
   const workoutEvent = workoutFits
-    ? { key:'workout', lm: effWk, label:'Zone 2 outdoors 40–50 min', color:'#10b981',
+    ? { key:'workout', lm: effWk, label:'Zone 2 outdoors 40–50 min', color:'var(--ev-workout)',
         sub:'Body clock ' + pdtOf(effWk) + ' · cortisol peak window · builds adenosine for tonight · NOT intervals' }
     : null;
-  const mealEvent   = { key:'meal', lm: mealLocal, label:'First meal — eat now', color:'#f97316',
+  const mealEvent   = { key:'meal', lm: mealLocal, label:'First meal — eat now', color:'var(--ev-meal)',
     sub:'Meal timing signals local time to gut clock · protein + complex carbs · avoid alcohol' };
 
   // ── Sun exposure event ────────────────────────────────────────────────────
@@ -1515,11 +1615,11 @@ function renderLayover(c) {
   const sunBodyClockEvening  = sunBodyClock >= 18*60 && sunBodyClock <= 22*60; // avoid
   const sunBodyClockMidday   = sunBodyClock > 10*60  && sunBodyClock < 18*60;  // neutral
   const sunEvent = sunIsDaylight ? (() => {
-    if (sunBodyClockMorning) return { key:'sun', lm: sunTime, label:'Get outside · morning sun', color:'#f59e0b',
+    if (sunBodyClockMorning) return { key:'sun', lm: sunTime, label:'Get outside · morning sun', color:'var(--ev-wake)',
       sub:'Body clock ' + pdtOf(sunTime) + ' — morning light window · strongest signal to hold home clock · 20–30 min direct outdoor light · face the sky' };
-    if (sunBodyClockEvening) return { key:'sun', lm: sunTime, label:'Avoid bright light · stay indoors', color:'#8892a4',
+    if (sunBodyClockEvening) return { key:'sun', lm: sunTime, label:'Avoid bright light · stay indoors', color:'var(--ev-neutral)',
       sub:'Body clock ' + pdtOf(sunTime) + ' — light-sensitive phase · outdoor light now delays your clock further · wear sunglasses if going out' };
-    return { key:'sun', lm: sunTime, label:'Outdoor light — neutral window', color:'#8892a4',
+    return { key:'sun', lm: sunTime, label:'Outdoor light — neutral window', color:'var(--ev-neutral)',
       sub:'Body clock ' + pdtOf(sunTime) + ' — midday body clock · light exposure now has minimal phase-shifting effect · go out for fresh air but no urgency' };
   })() : null;
 
@@ -1533,11 +1633,11 @@ function renderLayover(c) {
     const bodyClock = ((t - pdtDiff) % 1440 + 1440) % 1440;
     const localMod  = ((t % 1440) + 1440) % 1440;
     if (!(localMod >= 7*60 && localMod <= 19*60)) return null; // not daylight locally
-    if (bodyClock >= 6*60 && bodyClock <= 10*60) return { key:'sun_'+dayLabel, lm: t, label:'Get outside · morning sun — day '+dayLabel, color:'#f59e0b',
+    if (bodyClock >= 6*60 && bodyClock <= 10*60) return { key:'sun_'+dayLabel, lm: t, label:'Get outside · morning sun — day '+dayLabel, color:'var(--ev-wake)',
       sub:'Body clock ' + pdtOf(t) + ' — morning light window · strongest signal to hold home clock · 20–30 min direct outdoor light · face the sky' };
-    if (bodyClock >= 18*60 && bodyClock <= 22*60) return { key:'sun_'+dayLabel, lm: t, label:'Avoid bright light · stay indoors — day '+dayLabel, color:'#8892a4',
+    if (bodyClock >= 18*60 && bodyClock <= 22*60) return { key:'sun_'+dayLabel, lm: t, label:'Avoid bright light · stay indoors — day '+dayLabel, color:'var(--ev-neutral)',
       sub:'Body clock ' + pdtOf(t) + ' — light-sensitive phase · outdoor light now delays your clock further · wear sunglasses if going out' };
-    return { key:'sun_'+dayLabel, lm: t, label:'Outdoor light — neutral window — day '+dayLabel, color:'#8892a4',
+    return { key:'sun_'+dayLabel, lm: t, label:'Outdoor light — neutral window — day '+dayLabel, color:'var(--ev-neutral)',
       sub:'Body clock ' + pdtOf(t) + ' — midday body clock · light exposure now has minimal phase-shifting effect · go out for fresh air but no urgency' };
   };
   extraCycles.forEach(cyc => {
@@ -1549,25 +1649,25 @@ function renderLayover(c) {
     const cycWorkoutFits  = pickupCeiling !== null && cycWorkoutStart + 40 <= pickupCeiling;
     const cycMealStart    = cyc.wake + 45;
 
-    extraCycleEvents.push({ key:'caffeine_stop_'+cyc.n, lm: cycCafStop, label:'Caffeine cutoff — night '+cyc.n, color:'#84cc16',
+    extraCycleEvents.push({ key:'caffeine_stop_'+cyc.n, lm: cycCafStop, label:'Caffeine cutoff — night '+cyc.n, color:'var(--ev-caffeine)',
       sub:'6 hrs before sleep · half-life 5–6 hrs · stopping here protects sleep onset and slow-wave depth' });
-    extraCycleEvents.push({ key:'shower_'+cyc.n, lm: cycShower, label:'Wind down · Hot shower · Screens off — night '+cyc.n, color:'#ec4899',
+    extraCycleEvents.push({ key:'shower_'+cyc.n, lm: cycShower, label:'Wind down · Hot shower · Screens off — night '+cyc.n, color:'var(--ev-winddown)',
       sub:'90 min before sleep · hot shower → core temp drop → speeds sleep onset · screens off · dim lights' });
-    extraCycleEvents.push({ key:'eve_protocol_'+cyc.n, lm: cycStack, label:'Pre-sleep stack — night '+cyc.n, color:'#14b8a6',
+    extraCycleEvents.push({ key:'eve_protocol_'+cyc.n, lm: cycStack, label:'Pre-sleep stack — night '+cyc.n, color:'var(--ev-stack)',
       sub:'Mag glycinate 400mg · Glycine 3g · L-Theanine 200mg · Apigenin 50mg' +
           (cycNeedsMelatonin ? ' · 0.5mg melatonin (body clock '+pdtOf(cycStack)+' — phase-shifting dose)' : ' · skip melatonin — body clock near sleep phase') });
     extraCycleEvents.push({ key:'sleep_'+cyc.n, lm: cyc.sleep,
-      label:'Sleep — night '+cyc.n+(cyc.full?' · target 8hrs':' · partial, limited by pickup'), color:'#7c3aed',
+      label:'Sleep — night '+cyc.n+(cyc.full?' · target 8hrs':' · partial, limited by pickup'), color:'var(--ev-sleep)',
       sub:'Body clock ' + pdtOf(cyc.sleep) + ' · same home-anchored bedtime, night ' + cyc.n });
-    extraCycleEvents.push({ key:'wake_'+cyc.n, lm: cyc.wake, label:'Wake — night '+cyc.n, color:'#f59e0b', sub:'Light meal' });
+    extraCycleEvents.push({ key:'wake_'+cyc.n, lm: cyc.wake, label:'Wake — night '+cyc.n, color:'var(--ev-wake)', sub:'Light meal' });
     const cycSun = sunEventFor(cyc.wake, String(cyc.n));
     if (cycSun) extraCycleEvents.push(cycSun);
     if (cycWorkoutFits) {
-      extraCycleEvents.push({ key:'workout_'+cyc.n, lm: cycWorkoutStart, label:'Zone 2 outdoors 40–50 min — day '+cyc.n, color:'#10b981',
+      extraCycleEvents.push({ key:'workout_'+cyc.n, lm: cycWorkoutStart, label:'Zone 2 outdoors 40–50 min — day '+cyc.n, color:'var(--ev-workout)',
         sub:'Body clock ' + pdtOf(cycWorkoutStart) + ' · same cortisol-window logic, repeated each morning' });
     }
     if (pickupCeiling === null || cycMealStart < pickupCeiling) {
-      extraCycleEvents.push({ key:'meal_'+cyc.n, lm: cycMealStart, label:'Meal — day '+cyc.n, color:'#f97316',
+      extraCycleEvents.push({ key:'meal_'+cyc.n, lm: cycMealStart, label:'Meal — day '+cyc.n, color:'var(--ev-meal)',
         sub:'Protein + complex carbs · keeps gut clock anchored to home rhythm' });
     }
   });
@@ -1580,7 +1680,7 @@ function renderLayover(c) {
       // Short layover — nap not viable
       events = [
         cafEvent,
-        { key:'checkin', lm: checkinMin, label:'Hotel check-in — stay awake · layover too short for nap', color:'#f59e0b',
+        { key:'checkin', lm: checkinMin, label:'Hotel check-in — stay awake · layover too short for nap', color:'var(--ev-wake)',
           sub:'Under 16hrs — nap risks N3 inertia and delays main sleep. Stay awake, get outside, push to WOCL sleep window.' },
         mealEvent,
         workoutEvent,
@@ -1593,12 +1693,12 @@ function renderLayover(c) {
       const napWorkoutFits = effWkNap !== null && effWkNap + 40 <= napWorkoutCeiling;
       events = [
         cafEvent,
-        { key:'checkin', lm: checkinMin, label:'Hotel check-in — go horizontal · ' + napDurationMin + '-min nap', color:'#3b82f6',
+        { key:'checkin', lm: checkinMin, label:'Hotel check-in — go horizontal · ' + napDurationMin + '-min nap', color:'var(--ev-checkin)',
           sub:'Lie flat · eye mask + earplugs · TWO alarms · controlled ' + napDurationMin + '-min N1/N2 rest only · do NOT sleep past alarm' },
-        { key:'nap_wake', lm: napWakeMin, label:'NAP ALARM — up immediately', color:'#ef4444',
+        { key:'nap_wake', lm: napWakeMin, label:'NAP ALARM — up immediately', color:'var(--ev-alarm)',
           sub:'No snooze · cold water · stand outside · sleeping longer risks N3 inertia + circadian misalignment' },
         mealEvent,
-        napWorkoutFits ? { key:'workout', lm: effWkNap, label:'Zone 2 outdoors 40–50 min', color:'#10b981',
+        napWorkoutFits ? { key:'workout', lm: effWkNap, label:'Zone 2 outdoors 40–50 min', color:'var(--ev-workout)',
           sub:'Body clock ' + pdtOf(effWkNap) + ' · cortisol window · builds adenosine · NOT intervals' } : null,
         showerEvent, stackEvent, sleepEvent, wakeEvent, sunEvent, ...extraCycleEvents, prepEvent, pickupEvent,
       ].filter(Boolean);
@@ -1606,7 +1706,7 @@ function renderLayover(c) {
   } else if (scenario === 'awake') {
     events = [
       cafEvent,
-      { key:'checkin', lm: checkinMin, label:'Hotel check-in — stay awake · get outside', color:'#3b82f6',
+      { key:'checkin', lm: checkinMin, label:'Hotel check-in — stay awake · get outside', color:'var(--ev-checkin)',
         sub:'Do not lie down · get outdoor light now · horizontal rest risks crash before WOCL window' },
       mealEvent,
       workoutEvent,
@@ -1616,9 +1716,9 @@ function renderLayover(c) {
     // Sleep scenario — go down immediately
     const immediateSleep = checkinMin !== null ? checkinMin + 20 : effSl;
     events = [
-      { key:'checkin', lm: checkinMin, label:'Hotel check-in — go to sleep immediately', color:'#7c3aed',
+      { key:'checkin', lm: checkinMin, label:'Hotel check-in — go to sleep immediately', color:'var(--ev-sleep)',
         sub:'Blackout room · eye mask + earplugs · body clock ' + pdtOf(checkinMin) + ' — sleep conditions: ' + (needsMelatonin ? 'daytime body clock, use melatonin' : 'near sleep phase, good conditions') },
-      { key:'sleep', lm: immediateSleep, label:'Sleep now', color:'#7c3aed',
+      { key:'sleep', lm: immediateSleep, label:'Sleep now', color:'var(--ev-sleep)',
         sub:'Mag glycinate 400mg · Glycine 3g · L-Theanine 200mg · Apigenin 50mg' +
             (needsMelatonin ? ' · 0.5mg melatonin' : ' · skip melatonin') + ' · target 8hrs · ' + woclNote },
       wakeEvent, sunEvent, ...extraCycleEvents, prepEvent, pickupEvent,
@@ -1819,15 +1919,15 @@ function renderLayover(c) {
     // Event dots — each { row, pct } via locate(); dropped if outside the window
     const dotWorkout = events.find(e => e.key === 'workout');
     const dotDefs = [
-      { lm: checkinMin,  color:'#3b82f6',  label:'CI' },
-      { lm: mealLocal,   color:'#f97316',  label:'🍽' },
-      dotWorkout ? { lm: dotWorkout.lm, color:'#10b981', label:'🏃' } : null,
-      { lm: effSl,       color:'#7c3aed',  label:'😴' },
-      { lm: wakeMin,     color:'#f59e0b',  label:'⏰' },
-      { lm: pickupAbs,   color:'#ef4444',  label:'PU' },
+      { lm: checkinMin,  color:'var(--ev-checkin)',  label:'CI' },
+      { lm: mealLocal,   color:'var(--ev-meal)',  label:'🍽' },
+      dotWorkout ? { lm: dotWorkout.lm, color:'var(--ev-workout)', label:'🏃' } : null,
+      { lm: effSl,       color:'var(--ev-sleep)',  label:'😴' },
+      { lm: wakeMin,     color:'var(--ev-wake)',  label:'⏰' },
+      { lm: pickupAbs,   color:'var(--ev-alarm)',  label:'PU' },
       ...extraCycleEvents.map(e => ({
         lm: e.lm,
-        color: e.key.startsWith('sleep') ? '#7c3aed' : e.key.startsWith('wake') ? '#f59e0b' : e.key.startsWith('workout') ? '#10b981' : '#f97316',
+        color: e.key.startsWith('sleep') ? 'var(--ev-sleep)' : e.key.startsWith('wake') ? 'var(--ev-wake)' : e.key.startsWith('workout') ? 'var(--ev-workout)' : 'var(--ev-meal)',
         label: e.key.startsWith('sleep') ? '😴' : e.key.startsWith('wake') ? '⏰' : e.key.startsWith('workout') ? '🏃' : '🍽',
       })),
     ].filter(Boolean).map(d => ({ ...d, loc: locate(toElapsed(d.lm)) })).filter(d => d.loc);
@@ -1870,7 +1970,7 @@ function renderLayover(c) {
     ).join('');
 
     const needleHtml = (r) => (nowLoc && nowLoc.row === r)
-      ? `<div style="position:absolute;left:${nowLoc.pct.toFixed(2)}%;top:0;bottom:0;width:3px;background:#fff;opacity:0.9;z-index:10"><div style="position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid #fff"></div></div>`
+      ? `<div style="position:absolute;left:${nowLoc.pct.toFixed(2)}%;top:0;bottom:0;width:3px;background:var(--now-marker);opacity:0.9;z-index:10"><div style="position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid var(--now-marker)"></div></div>`
       : '';
 
     const rowsHtml = rows.map((row, r) => `
@@ -1900,13 +2000,13 @@ function renderLayover(c) {
         <div style="display:flex;align-items:center;gap:3px"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.35);border:1px solid rgba(239,68,68,0.6)"></div><span style="font-size:11px;color:var(--text3)">WOCL</span></div>
         <div style="display:flex;align-items:center;gap:3px"><div style="width:12px;height:12px;border-radius:2px;background:rgba(124,58,237,0.35)"></div><span style="font-size:11px;color:var(--text3)">Sleep</span></div>
         <div style="display:flex;align-items:center;gap:3px"><div style="width:12px;height:12px;border-radius:2px;background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.4)"></div><span style="font-size:11px;color:var(--text3)">No meal</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:2px;height:10px;background:#fff;opacity:0.7"></div><span style="font-size:9px;color:var(--text3)">Now</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#3b82f6"></div><span style="font-size:11px;color:var(--text3)">CI</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#f97316"></div><span style="font-size:11px;color:var(--text3)">Meal</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#10b981"></div><span style="font-size:11px;color:var(--text3)">Workout</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#7c3aed"></div><span style="font-size:11px;color:var(--text3)">Sleep</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#f59e0b"></div><span style="font-size:11px;color:var(--text3)">Wake</span></div>
-        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:#ef4444"></div><span style="font-size:11px;color:var(--text3)">PU</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:2px;height:10px;background:var(--now-marker);opacity:0.7"></div><span style="font-size:9px;color:var(--text3)">Now</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-checkin)"></div><span style="font-size:11px;color:var(--text3)">CI</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-meal)"></div><span style="font-size:11px;color:var(--text3)">Meal</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-workout)"></div><span style="font-size:11px;color:var(--text3)">Workout</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-sleep)"></div><span style="font-size:11px;color:var(--text3)">Sleep</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-wake)"></div><span style="font-size:11px;color:var(--text3)">Wake</span></div>
+        <div style="display:flex;align-items:center;gap:3px"><div style="width:11px;height:11px;border-radius:50%;background:var(--ev-alarm)"></div><span style="font-size:11px;color:var(--text3)">PU</span></div>
       </div>
     </div>`;
   }
@@ -2246,7 +2346,7 @@ function showDeleteCityPopup() {
       delBtn.style.cssText = 'padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:var(--red-l);color:var(--red);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:8px';
       delBtn.addEventListener('click', () => {
         delBtn.textContent = 'Confirm?';
-        delBtn.style.background = 'var(--red)'; delBtn.style.color = '#fff';
+        delBtn.style.background = 'var(--red)'; delBtn.style.color = 'var(--on-accent)';
         delBtn.addEventListener('click', () => {
           state.customCities.splice(i, 1);
           saveState();
@@ -3880,7 +3980,7 @@ function renderPreflight(c) {
     const applyArrFuelColor = (v) => {
       const n = parseFloat(v);
       if (isNaN(n)) { arrFuelEl.style.background=''; arrFuelEl.style.color=''; }
-      else if (n < 25) { arrFuelEl.style.background='var(--red)'; arrFuelEl.style.color='#fff'; }
+      else if (n < 25) { arrFuelEl.style.background='var(--red)'; arrFuelEl.style.color='var(--on-accent)'; }
       else if (n < 30) { arrFuelEl.style.background='var(--red-l)'; arrFuelEl.style.color='var(--red)'; }
       else { arrFuelEl.style.background=''; arrFuelEl.style.color=''; }
     };
@@ -4053,7 +4153,7 @@ function renderPreflight(c) {
   calcWind    = ()=>{ const rwy=parseInt(fl.rwy)||0; const dir=parseInt(fl.windDir)||0; const spd=parseInt(fl.windSpd)||0; const rwyHdg=(rwy*10)%360; const angle=(dir-rwyHdg)*Math.PI/180; return {xw:Math.round(Math.abs(spd*Math.sin(angle))),hw:Math.round(spd*Math.cos(angle))}; };
   windCalc    = calcWind();
   twLimitDep  = ()=>(fl.acType||'777-200ER')==='777-300ER'?15:10;
-  applyHwStyle= (el,hw)=>{ const lim=twLimitDep(); const exceeded=hw<0&&Math.abs(hw)>lim; el.style.color=hw>=0?'var(--green)':exceeded?'#fff':Math.abs(hw)>=1?'var(--amber)':'var(--green)'; el.style.background=exceeded?'var(--red)':'var(--surf2)'; el.style.borderColor=exceeded?'var(--red)':'var(--border2)'; };
+  applyHwStyle= (el,hw)=>{ const lim=twLimitDep(); const exceeded=hw<0&&Math.abs(hw)>lim; el.style.color=hw>=0?'var(--green)':exceeded?'var(--on-accent)':Math.abs(hw)>=1?'var(--amber)':'var(--green)'; el.style.background=exceeded?'var(--red)':'var(--surf2)'; el.style.borderColor=exceeded?'var(--red)':'var(--border2)'; };
   xwVal       = document.createElement('div'); xwVal.style.cssText='padding:5px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);font-size:18px;font-family:SF Mono,monospace;text-align:center;width:48px';
   xwVal.style.color=windCalc.xw>25?'var(--red)':windCalc.xw>10?'var(--amber)':'var(--text)';
   xwVal.textContent=String(windCalc.xw).padStart(2,'0');
@@ -4177,7 +4277,7 @@ function renderPreflight(c) {
       // Buttons
       const btnRow = document.createElement('div'); btnRow.style.cssText = 'display:flex;gap:8px';
       const saveBtn = document.createElement('button'); saveBtn.textContent = 'Save';
-      saveBtn.style.cssText = 'flex:2;padding:11px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+      saveBtn.style.cssText = 'flex:2;padding:11px;border-radius:8px;border:none;background:var(--blue);color:var(--on-accent);font-size:14px;font-weight:700;cursor:pointer';
       const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancel';
       cancelBtn.style.cssText = 'flex:1;padding:11px;border-radius:8px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer';
       cancelBtn.addEventListener('click', () => pop.remove());
@@ -4688,7 +4788,7 @@ function renderPreflight(c) {
   // Takeoff Brief button
   const tbBtn=document.createElement('button');
   tbBtn.textContent='Takeoff Brief';
-  tbBtn.style.cssText='flex:1;padding:8px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.2px';
+  tbBtn.style.cssText='flex:1;padding:8px;border-radius:8px;border:none;background:var(--blue);color:var(--on-accent);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.2px';
   tbBtn.addEventListener('click', ()=>{
     const existing=document.getElementById('tkoff-brief');
     if(existing) { existing.remove(); return; }
@@ -5849,7 +5949,7 @@ const now = new Date();
   };
   const bkAlarms = [
     { key:'wake',   time:wakeTime,   color:'var(--amber)',  bg:'var(--amber-l)',  label:'BREAK 1', cdId:'cd-break1' },
-    { key:'break2', time:break2Time, color:'#ec4899',       bg:'var(--pink-l)',   label:'BREAK 2', cdId:'cd-break2' },
+    { key:'break2', time:break2Time, color:'var(--pink)',       bg:'var(--pink-l)',   label:'BREAK 2', cdId:'cd-break2' },
     { key:'break3', time:break3Time, color:'var(--teal)',   bg:'var(--teal-l)',   label:'BREAK 3', cdId:'cd-break3' },
     { key:'break4', time:break4Time, color:'var(--purple)', bg:'var(--purple-l)', label:'BREAK 4', cdId:'cd-break4' },
   ];
@@ -5892,7 +5992,7 @@ const now = new Date();
   html += timersHtml;
   // ── IDL notice ───────────────────────────────────────────────────────────
   if (idlNote) {
-    const idlColor = idlNote.dir === 'westbound' ? '#f59e0b' : '#3b82f6';
+    const idlColor = idlNote.dir === 'westbound' ? 'var(--amber)' : 'var(--blue)';
     const idlBg    = idlNote.dir === 'westbound' ? 'var(--amber-l)' : 'var(--blue-ll)';
     const dayNote  = idlNote.dir === 'westbound'
       ? (arrCity === 'AKL' || arrCity === 'SYD' ? '+2 days' : '+1 or +2 days')
@@ -6230,7 +6330,7 @@ function showBreakCalc() {
   const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:10px';
 
   const setAlarmsBtn=document.createElement('button'); setAlarmsBtn.textContent='Set Alarms \u2193';
-  setAlarmsBtn.style.cssText='flex:1;padding:12px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:700;cursor:pointer';
+  setAlarmsBtn.style.cssText='flex:1;padding:12px;border-radius:10px;border:none;background:var(--blue);color:var(--on-accent);font-size:15px;font-weight:700;cursor:pointer';
   setAlarmsBtn.addEventListener('click',()=>{
     const ends=calcEnds();
     const keys=['wakeTime','break2Time','break3Time','break4Time'];
@@ -6511,11 +6611,11 @@ function renderRedispatch(c) {
         </div>
       </div>
       <div style="display:flex;gap:10px">
-        <button onclick="activateRedispatch(false)" style="flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--green);background:${!isActive?'var(--green)':'var(--green-l)'};color:${!isActive?'#fff':'var(--green)'};font-size:14px;font-weight:800;cursor:pointer;text-align:center;line-height:1.4">
+        <button onclick="activateRedispatch(false)" style="flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--green);background:${!isActive?'var(--green)':'var(--green-l)'};color:${!isActive?'var(--on-accent)':'var(--green)'};font-size:14px;font-weight:800;cursor:pointer;text-align:center;line-height:1.4">
           CONTINUE<br><span style="font-size:11px;font-weight:600;opacity:0.85">&#8594; ${fl.rdOrigArrCity||arrCity}</span><br>
           <span style="font-size:11px;font-weight:600;opacity:0.75">Pln arr ${fl.rdOrigArrFuel||fuelArrPlanned} klbs</span>
         </button>
-        <button onclick="activateRedispatch(true)" style="flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--red);background:${isActive?'var(--red)':'var(--red-l)'};color:${isActive?'#fff':'var(--red)'};font-size:14px;font-weight:800;cursor:pointer;text-align:center;line-height:1.4">
+        <button onclick="activateRedispatch(true)" style="flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--red);background:${isActive?'var(--red)':'var(--red-l)'};color:${isActive?'var(--on-accent)':'var(--red)'};font-size:14px;font-weight:800;cursor:pointer;text-align:center;line-height:1.4">
           REDISPATCH<br><span style="font-size:11px;font-weight:600;opacity:0.85">&#8594; ${rdAirport}</span><br>
           <span style="font-size:11px;font-weight:600;opacity:0.75">Pln arr ${rdArrFuelRdApt} klbs</span>
         </button>
@@ -6612,7 +6712,7 @@ function renderRedispatch(c) {
     };
     const bkAlarms2 = [
       { key:'wake',   time:wakeTime2,   color:'var(--amber)',  bg:'var(--amber-l)',  label:'BREAK 1', cdId:'cd-break1' },
-      { key:'break2', time:break2Time2, color:'#ec4899',       bg:'var(--pink-l)',   label:'BREAK 2', cdId:'cd-break2' },
+      { key:'break2', time:break2Time2, color:'var(--pink)',       bg:'var(--pink-l)',   label:'BREAK 2', cdId:'cd-break2' },
       { key:'break3', time:break3Time2, color:'var(--teal)',   bg:'var(--teal-l)',   label:'BREAK 3', cdId:'cd-break3' },
       { key:'break4', time:break4Time2, color:'var(--purple)', bg:'var(--purple-l)', label:'BREAK 4', cdId:'cd-break4' },
     ];
@@ -6786,12 +6886,12 @@ function showShortcutsOverlay(alarms) {
   if (existing) existing.remove();
 
   const isLight = document.body.classList.contains('light');
-  const bg    = isLight ? '#ffffff' : '#1a1d23';
+  const bg    = 'var(--pop-bg)';
   const outer = isLight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.88)';
-  const t1    = isLight ? '#1a1a18' : '#e8eaf0';
-  const t2    = isLight ? '#5f5e5a' : '#8892a4';
-  const bdr   = isLight ? '#e2dfd6' : '#2a3340';
-  const btnbg = isLight ? '#185FA5' : '#185FA5';
+  const t1    = 'var(--text)';
+  const t2    = 'var(--text2)';
+  const bdr   = 'var(--pop-border)';
+  const btnbg = 'var(--pop-btn)';
 
   const rows = alarms.map(a => {
     const ms    = new Date(a.date + 'T' + a.time + ':00Z').getTime();
@@ -6799,7 +6899,7 @@ function showShortcutsOverlay(alarms) {
     const lh    = String(local.getHours()).padStart(2,'0');
     const lm    = String(local.getMinutes()).padStart(2,'0');
     return '<div style="margin:8px 0;padding:10px;border-radius:8px;border:1px solid ' + bdr + '">'
-      + '<div style="font-size:13px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + a.label + '</div>'
+      + '<div style="font-size:13px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + a.label + '</div>'
       + '<div style="font-size:13px;font-weight:700;font-family:SF Mono,monospace;color:' + t1 + '">' + a.time + ' UTC</div>'
       + '<div style="font-size:12px;color:' + t2 + ';margin-top:2px">' + lh + ':' + lm + ' device local time</div>'
       + '</div>';
@@ -6817,7 +6917,7 @@ function showShortcutsOverlay(alarms) {
     + '<strong style="color:' + t1 + '">One-time setup:</strong> In Shortcuts, create a shortcut called "Protocol Alarm" with a Receive Input action, then a Set Timer or Create Reminder action using the clipboard text. After setup, this button does it in one tap.<br><br>'
     + 'Or: open Shortcuts, tap + to add a new automation timed to each alarm time below, and add a notification action saying "WAKE UP — end crew rest".'
     + '</div>'
-    + '<a href="shortcuts://" style="display:block;padding:12px;border-radius:10px;background:' + btnbg + ';color:#fff;text-align:center;font-size:12px;font-weight:700;text-decoration:none;margin-bottom:8px">Open Shortcuts</a>'
+    + '<a href="shortcuts://" style="display:block;padding:12px;border-radius:10px;background:' + btnbg + ';color:var(--on-accent);text-align:center;font-size:12px;font-weight:700;text-decoration:none;margin-bottom:8px">Open Shortcuts</a>'
     + '<button onclick="dismissShortcutsOverlay()" style="width:100%;padding:10px;border-radius:10px;border:1px solid ' + bdr + ';background:transparent;color:' + t2 + ';font-size:13px;cursor:pointer">Dismiss</button>'
     + '</div>';
   document.body.appendChild(ov);
@@ -6864,7 +6964,7 @@ function showShareFlightPopup() {
 
   const copyBtn = document.createElement('button');
   copyBtn.textContent = '\uD83D\uDCCB Copy to Clipboard';
-  copyBtn.style.cssText = 'width:100%;padding:12px;border-radius:8px;border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  copyBtn.style.cssText = 'width:100%;padding:12px;border-radius:8px;border:none;background:var(--teal);color:var(--on-accent);font-size:14px;font-weight:700;cursor:pointer';
   copyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(fl));
@@ -6928,11 +7028,11 @@ function showShareFlightPopup() {
 
   const importBtn = document.createElement('button');
   importBtn.textContent = '\u26A1 Import';
-  importBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  importBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--blue);color:var(--on-accent);font-size:14px;font-weight:700;cursor:pointer';
 
   // Confirm sub-panel — always asks overwrite vs. new slot before committing.
   const confirmWrap = document.createElement('div');
-  confirmWrap.style.cssText = 'display:none;flex-direction:column;gap:8px;padding:10px;background:var(--amber-l,#fff8e1);border:1px solid var(--amber);border-radius:8px';
+  confirmWrap.style.cssText = 'display:none;flex-direction:column;gap:8px;padding:10px;background:var(--amber-l);border:1px solid var(--amber);border-radius:8px';
   const confirmMsg = document.createElement('div');
   confirmMsg.style.cssText = 'font-size:12px;color:var(--text);font-weight:600';
   const confirmBtnRow = document.createElement('div');
@@ -7061,7 +7161,7 @@ function showLegsPage() {
   rows.forEach((row, i) => {
     const isRD       = rdPtIdent && (row.ident||'').toUpperCase() === rdPtIdent;
     const isAltChg   = altChanges.has(i);
-    const bg         = isRD ? 'var(--amber-l,#fff8e1)' : isAltChg ? 'var(--teal-l)' : (i%2===0 ? 'var(--surf)' : 'var(--surf2)');
+    const bg         = isRD ? 'var(--amber-l)' : isAltChg ? 'var(--teal-l)' : (i%2===0 ? 'var(--surf)' : 'var(--surf2)');
     const identColor = isRD ? 'var(--amber)' : isAltChg ? 'var(--teal)' : 'var(--text)';
     const flColor    = isRD ? 'var(--amber)' : isAltChg ? 'var(--teal)' : 'var(--blue)';
 
@@ -7112,10 +7212,10 @@ function showClockToast(h, m, label) {
   if (existing) existing.remove();
 
   var isLight = document.body.classList.contains('light');
-  var bg  = isLight ? '#ffffff' : '#1a1d23';
-  var t1  = isLight ? '#1a1a18' : '#e8eaf0';
-  var t2  = isLight ? '#5f5e5a' : '#8892a4';
-  var bdr = isLight ? '#e2dfd6' : '#2a3340';
+  var bg  = 'var(--pop-bg)';
+  var t1  = 'var(--text)';
+  var t2  = 'var(--text2)';
+  var bdr = 'var(--pop-border)';
 
   var toast = document.createElement('div');
   toast.id = 'clock-toast';
@@ -7136,7 +7236,7 @@ function showClockToast(h, m, label) {
   hint.textContent = 'device local time';
 
   var siriBox = document.createElement('div');
-  siriBox.style.cssText = 'background:' + (isLight?'#F1EFE8':'#181c22') + ';border-radius:10px;padding:10px 14px;margin-bottom:14px;text-align:left';
+  siriBox.style.cssText = 'background:' + 'var(--surf2)' + ';border-radius:10px;padding:10px 14px;margin-bottom:14px;text-align:left';
 
   var siriLbl = document.createElement('div');
   siriLbl.style.cssText = 'font-size:13px;font-weight:700;color:' + t2 + ';text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px';
@@ -7153,7 +7253,7 @@ function showClockToast(h, m, label) {
 
   var openLink = document.createElement('button');
   openLink.style.cssText = 'display:block;width:100%;padding:12px;border-radius:10px;border:none;'
-    + 'background:#185FA5;color:#fff;font-size:12px;font-weight:700;cursor:pointer;'
+    + 'background:var(--pop-btn);color:var(--on-accent);font-size:12px;font-weight:700;cursor:pointer;'
     + 'margin-bottom:8px;box-sizing:border-box;text-align:center';
   openLink.textContent = 'Share alarm time';
   openLink.addEventListener('click', function() {
@@ -7258,7 +7358,7 @@ function updateBreakCountdowns() {
         if (el.parentElement) el.parentElement.style.opacity = '0.5';
         alarmFired[elId] = false;
       } else {
-        el.textContent = 'WAKE'; el.style.color = '#ef4444';
+        el.textContent = 'WAKE'; el.style.color = 'var(--red)';
         if (el.parentElement) el.parentElement.style.opacity = '1';
       }
       return;
@@ -7270,10 +7370,10 @@ function updateBreakCountdowns() {
     const mins = Math.floor((totalSecs % 3600) / 60);
     const secs = totalSecs % 60;
     el.textContent = String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
-    if (elId === 'cd-break1') el.style.color = totalSecs < 1800 ? '#ef4444' : 'var(--amber)';
-    if (elId === 'cd-break2') el.style.color = totalSecs < 1800 ? '#ef4444' : '#ec4899';
-    if (elId === 'cd-break3') el.style.color = totalSecs < 1800 ? '#ef4444' : 'var(--teal)';
-    if (elId === 'cd-break4') el.style.color = totalSecs < 1800 ? '#ef4444' : 'var(--purple)';
+    if (elId === 'cd-break1') el.style.color = totalSecs < 1800 ? 'var(--red)' : 'var(--amber)';
+    if (elId === 'cd-break2') el.style.color = totalSecs < 1800 ? 'var(--red)' : 'var(--pink)';
+    if (elId === 'cd-break3') el.style.color = totalSecs < 1800 ? 'var(--red)' : 'var(--teal)';
+    if (elId === 'cd-break4') el.style.color = totalSecs < 1800 ? 'var(--red)' : 'var(--purple)';
   }
 
   countdownFor(fl.wakeDate,   fl.wakeTime,   'cd-break1');
@@ -7361,7 +7461,7 @@ function showRefGuide(depIcao, arrIcao, flightNum) {
     (marks[idx]||[]).forEach(([rx,ry])=>{
       const x=rx*canvas.width, y=ry*canvas.height;
       ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle='rgba(16,185,129,0.85)'; ctx.fill();
-      ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.21;
+      ctx.strokeStyle='var(--on-accent)'; ctx.lineWidth=r*0.21;
       ctx.beginPath(); ctx.moveTo(x-r*0.43,y); ctx.lineTo(x-r*0.07,y+r*0.36); ctx.lineTo(x+r*0.5,y-r*0.43); ctx.stroke();
     });
   };
@@ -7369,8 +7469,8 @@ function showRefGuide(depIcao, arrIcao, flightNum) {
   const renderGuide=(guide)=>{
     content.innerHTML=''; activeGuide=guide;
     [atlBtn,pacBtn].forEach(b=>{b.style.background='transparent';b.style.color='var(--text2)'});
-    if(guide==='atlantic'){atlBtn.style.background='var(--blue)';atlBtn.style.color='#fff';}
-    else{pacBtn.style.background='var(--blue)';pacBtn.style.color='#fff';}
+    if(guide==='atlantic'){atlBtn.style.background='var(--blue)';atlBtn.style.color='var(--on-accent)';}
+    else{pacBtn.style.background='var(--blue)';pacBtn.style.color='var(--on-accent)';}
     let marks=loadMarks(guide);
     const pageImgs=guide==='atlantic'?EUROPE_PAGES:PACIFIC_PAGES;
     pageImgs.forEach((src,idx)=>{
@@ -7615,10 +7715,10 @@ function showDivertPopup() {
       +'<div style="font-size:22px;color:var(--text2);margin-top:4px">'+ap.loc+'</div>';
     const badges = document.createElement('div');
     badges.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0';
-    badges.innerHTML = '<span style="padding:5px 12px;border-radius:8px;background:'+color+';color:#fff;font-size:20px;font-weight:700">B777: '+label+'</span>'
-      +(ap.medical ? '<span style="padding:5px 12px;border-radius:8px;background:var(--blue);color:#fff;font-size:20px;font-weight:700">Medical</span>'
+    badges.innerHTML = '<span style="padding:5px 12px;border-radius:8px;background:'+color+';color:var(--on-accent);font-size:20px;font-weight:700">B777: '+label+'</span>'
+      +(ap.medical ? '<span style="padding:5px 12px;border-radius:8px;background:var(--blue);color:var(--on-accent);font-size:20px;font-weight:700">Medical</span>'
                    : '<span style="padding:5px 10px;border-radius:8px;background:var(--surf2);color:var(--text3);font-size:20px;font-weight:700">No Medical</span>')
-      +(ap.etops   ? '<span style="padding:5px 12px;border-radius:8px;background:var(--teal);color:#fff;font-size:20px;font-weight:700">ETOPS</span>' : '');
+      +(ap.etops   ? '<span style="padding:5px 12px;border-radius:8px;background:var(--teal);color:var(--on-accent);font-size:20px;font-weight:700">ETOPS</span>' : '');
     nameRow.appendChild(nameBlock); nameRow.appendChild(badges);
     hdr.appendChild(nameRow); card.appendChild(hdr);
 
@@ -7665,7 +7765,7 @@ function showDivertPopup() {
 
     const confirmBtn = document.createElement('button');
     confirmBtn.textContent = 'Confirm Divert \u2192 ' + (ap.icao||ap.iata);
-    confirmBtn.style.cssText = 'flex:2;padding:14px;border-radius:10px;border:none;background:var(--amber);color:#000;font-size:22px;font-weight:800;cursor:pointer';
+    confirmBtn.style.cssText = 'flex:2;padding:14px;border-radius:10px;border:none;background:var(--amber);color:var(--on-warn);font-size:22px;font-weight:800;cursor:pointer';
     // Two-step confirm (.102): first tap arms, second tap diverts. Nothing on the
     // Arrival page changes until the second tap; it un-arms itself after 10 s.
     const divertCode = ap.icao || ap.iata;
@@ -7676,14 +7776,14 @@ function showDivertPopup() {
     const disarmDivert = () => {
       divertArmed = false; clearTimeout(divertTimer);
       confirmBtn.textContent = 'Confirm Divert → ' + divertCode;
-      confirmBtn.style.background = 'var(--amber)'; confirmBtn.style.color = '#000';
+      confirmBtn.style.background = 'var(--amber)'; confirmBtn.style.color = 'var(--on-warn)';
       cancelDivertBtn.style.display = 'none';
     };
     confirmBtn.addEventListener('click', () => {
       if (!divertArmed) {
         divertArmed = true;
         confirmBtn.textContent = 'Tap again to DIVERT to ' + divertCode;
-        confirmBtn.style.background = 'var(--red)'; confirmBtn.style.color = '#fff';
+        confirmBtn.style.background = 'var(--red)'; confirmBtn.style.color = 'var(--on-accent)';
         cancelDivertBtn.style.display = '';
         divertTimer = setTimeout(disarmDivert, 10000);
         return;
@@ -7913,7 +8013,7 @@ function showDivertPopup() {
     confirmLbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--red)';
     const yesBtn = document.createElement('button');
     yesBtn.textContent = 'Yes';
-    yesBtn.style.cssText = 'padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:var(--red);color:#fff;font-size:12px;font-weight:700;cursor:pointer';
+    yesBtn.style.cssText = 'padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:var(--red);color:var(--on-accent);font-size:12px;font-weight:700;cursor:pointer';
     const noBtn = document.createElement('button');
     noBtn.textContent = 'No';
     noBtn.style.cssText = 'padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer';
@@ -8335,7 +8435,7 @@ function recalcArrWind() {
   const xwC = xw > 25 ? 'var(--red)' : xw > 10 ? 'var(--amber)' : 'var(--green)';
   const twLimit = (fl.acType || '777-200ER') === '777-300ER' ? 15 : 10;
   const twExceeded = hw < 0 && Math.abs(hw) > twLimit;
-  const hwC = hw >= 0 ? 'var(--green)' : twExceeded ? '#fff' : Math.abs(hw) >= 1 ? 'var(--amber)' : 'var(--green)';
+  const hwC = hw >= 0 ? 'var(--green)' : twExceeded ? 'var(--on-accent)' : Math.abs(hw) >= 1 ? 'var(--amber)' : 'var(--green)';
   const bx = 'padding:4px 8px;border-radius:5px;border:1px solid var(--border2);background:var(--surf3);font-size:13px;font-weight:700;font-family:monospace;text-align:center;cursor:pointer';
   const hwBx = twExceeded ? bx.replace('background:var(--surf3)', 'background:var(--red);border-color:var(--red)') : bx;
   el.innerHTML = '<div style="display:flex;gap:8px;align-items:flex-end">'
@@ -8990,7 +9090,7 @@ function showCDILoader() {
   ta.style.cssText = 'flex:1;min-height:180px;width:100%;background:var(--surf2);border:1px solid var(--border2);border-radius:8px;padding:10px;color:var(--text);font-size:11px;font-family:SF Mono,monospace;line-height:1.5;resize:none;box-sizing:border-box;outline:none';
   const parseBtn = document.createElement('button');
   parseBtn.textContent = '\u26a1 Parse & Save CDI';
-  parseBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  parseBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--teal);color:var(--on-accent);font-size:14px;font-weight:700;cursor:pointer';
   parseBtn.addEventListener('click', () => runCDIParse(ta.value));
   pasteSection.appendChild(pasteTtl); pasteSection.appendChild(clipBtn); pasteSection.appendChild(ta); pasteSection.appendChild(parseBtn);
 
@@ -9674,7 +9774,7 @@ function showCDIViewer() {
   const clearBtn = document.createElement('button'); clearBtn.textContent = 'Clear CDI';
   clearBtn.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid var(--red);background:var(--red-l);color:var(--red);font-size:12px;font-weight:700;cursor:pointer';
   clearBtn.addEventListener('click', () => {
-    clearBtn.textContent = 'Confirm?'; clearBtn.style.background = 'var(--red)'; clearBtn.style.color = '#fff';
+    clearBtn.textContent = 'Confirm?'; clearBtn.style.background = 'var(--red)'; clearBtn.style.color = 'var(--on-accent)';
     clearBtn.addEventListener('click', () => {
       setFlight('cdiRaw', ''); setFlight('cdiData', ''); pop.remove(); render();
     }, { once: true });
@@ -9710,17 +9810,17 @@ function showCDIViewer() {
   // ── Jetbridge Code Banner ──
   if (data.jetbridge) {
     const jbBanner = document.createElement('div');
-    jbBanner.style.cssText = 'background:var(--amber-l,#fff8e1);border:2px solid var(--amber,#f59e0b);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-shrink:0';
+    jbBanner.style.cssText = 'background:var(--amber-l);border:2px solid var(--amber);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-shrink:0';
     const jbIcon = document.createElement('div');
     jbIcon.style.cssText = 'font-size:28px;line-height:1;flex-shrink:0';
     jbIcon.textContent = '\uD83D\uDD11'; // key emoji
     const jbText = document.createElement('div');
     jbText.style.cssText = 'flex:1';
     const jbLbl = document.createElement('div');
-    jbLbl.style.cssText = 'font-size:10px;font-weight:800;color:var(--amber,#f59e0b);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px';
+    jbLbl.style.cssText = 'font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:2px';
     jbLbl.textContent = 'Jetbridge Code';
     const jbCode = document.createElement('div');
-    jbCode.style.cssText = 'font-size:32px;font-weight:900;color:var(--amber,#f59e0b);font-family:SF Mono,monospace;letter-spacing:4px';
+    jbCode.style.cssText = 'font-size:32px;font-weight:900;color:var(--amber);font-family:SF Mono,monospace;letter-spacing:4px';
     jbCode.textContent = data.jetbridge;
     jbText.appendChild(jbLbl); jbText.appendChild(jbCode);
     jbBanner.appendChild(jbIcon); jbBanner.appendChild(jbText);
@@ -9788,7 +9888,7 @@ function showCDIViewer() {
       row.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:9px 4px;cursor:pointer;user-select:none';
 
       const seatEl = document.createElement('div');
-      seatEl.style.cssText = 'font-size:12px;font-weight:800;color:'+(isCockpit?'var(--blue)':'var(--teal)')+';width:44px;flex-shrink:0;text-align:center;background:'+(isCockpit?'var(--blue-ll,#e8f0fe)':'var(--teal-l)')+';border-radius:6px;padding:3px 0;margin-top:1px';
+      seatEl.style.cssText = 'font-size:12px;font-weight:800;color:'+(isCockpit?'var(--blue)':'var(--teal)')+';width:44px;flex-shrink:0;text-align:center;background:'+(isCockpit?'var(--blue-ll)':'var(--teal-l)')+';border-radius:6px;padding:3px 0;margin-top:1px';
       seatEl.textContent = cr.seat;
 
       const infoCol = document.createElement('div');
@@ -9859,7 +9959,7 @@ function showCDIViewer() {
         histList.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px';
         prevFlights.slice(-10).reverse().forEach(fid => {
           const chip = document.createElement('div');
-          chip.style.cssText = 'font-size:11px;font-weight:600;color:var(--blue);background:var(--blue-ll,#e8f0fe);border-radius:6px;padding:2px 8px;font-family:SF Mono,monospace';
+          chip.style.cssText = 'font-size:11px;font-weight:600;color:var(--blue);background:var(--blue-ll);border-radius:6px;padding:2px 8px;font-family:SF Mono,monospace';
           chip.textContent = fid.replace('_', ' ');
           histList.appendChild(chip);
         });
@@ -10111,7 +10211,7 @@ function showFlightPlanLoader() {
 
   const parseBtn = document.createElement('button');
   parseBtn.textContent = '⚡ Parse & Fill Fields';
-  parseBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.2px';
+  parseBtn.style.cssText = 'width:100%;padding:13px;border-radius:8px;border:none;background:var(--blue);color:var(--on-accent);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.2px';
   parseBtn.addEventListener('click', () => {
     try {
       runParse(ta.value);
@@ -10225,11 +10325,11 @@ function renderORVTable(rows, container, legsData) {
   tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:11px;font-family:SF Mono,monospace';
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  hr.style.cssText = 'background:var(--surf2,#1e2229)';
+  hr.style.cssText = 'background:var(--surf2)';
   COLS.forEach(c => {
     const th = document.createElement('th');
     th.textContent = c;
-    th.style.cssText = 'padding:6px 8px;text-align:center;color:var(--text3,#8899aa);font-size:10px;font-weight:700;letter-spacing:0.5px;white-space:nowrap;border-bottom:1px solid var(--border,#2a3040)';
+    th.style.cssText = 'padding:6px 8px;text-align:center;color:var(--text3);font-size:10px;font-weight:700;letter-spacing:0.5px;white-space:nowrap;border-bottom:1px solid var(--border)';
     hr.appendChild(th);
   });
   thead.appendChild(hr);
@@ -10238,29 +10338,29 @@ function renderORVTable(rows, container, legsData) {
   rows.forEach((row, i) => {
     const isAlt = altChanges.has(i);
     const tr = document.createElement('tr');
-    tr.style.cssText = 'background:' + (isAlt ? 'var(--teal-l,#0d332f)' : (i%2===0 ? 'var(--surf,#161b22)' : 'var(--surf2,#1e2229)'));
+    tr.style.cssText = 'background:' + (isAlt ? 'var(--teal-l)' : (i%2===0 ? 'var(--surf)' : 'var(--surf2)'));
     // TO IDENT
     const tdIdent = document.createElement('td');
     tdIdent.textContent = row.ident || '—';
-    tdIdent.style.cssText = 'padding:6px 8px;text-align:center;color:' + (isAlt?'var(--teal,#14b8a6)':'var(--text,#e6edf3)') + ';font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#2a3040)';
+    tdIdent.style.cssText = 'padding:6px 8px;text-align:center;color:' + (isAlt?'var(--teal)':'var(--text)') + ';font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border)';
     tr.appendChild(tdIdent);
     // LAT + LONG (tighter padding)
     ['lat','lon'].forEach(k => {
       const td = document.createElement('td');
       td.textContent = row[k] || '—';
-      td.style.cssText = 'padding:6px 4px;text-align:center;color:var(--text2,#cdd9e5);white-space:nowrap;border-bottom:1px solid var(--border,#2a3040)';
+      td.style.cssText = 'padding:6px 4px;text-align:center;color:var(--text2);white-space:nowrap;border-bottom:1px solid var(--border)';
       tr.appendChild(td);
     });
     // FL/MK
     const tdFl = document.createElement('td');
     tdFl.textContent = row._flmk || '—';
-    tdFl.style.cssText = 'padding:6px 8px;text-align:center;color:' + (isAlt?'var(--teal,#14b8a6)':'var(--blue,#3b82f6)') + ';font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#2a3040)';
+    tdFl.style.cssText = 'padding:6px 8px;text-align:center;color:' + (isAlt?'var(--teal)':'var(--blue)') + ';font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border)';
     tr.appendChild(tdFl);
     // Remaining columns
     ['tc','mc','mh','dist'].forEach(k => {
       const td = document.createElement('td');
       td.textContent = row[k] || '—';
-      td.style.cssText = 'padding:6px 8px;text-align:center;color:var(--text2,#cdd9e5);white-space:nowrap;border-bottom:1px solid var(--border,#2a3040)';
+      td.style.cssText = 'padding:6px 8px;text-align:center;color:var(--text2);white-space:nowrap;border-bottom:1px solid var(--border)';
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
