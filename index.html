@@ -59,6 +59,7 @@ html,body{height:100%;height:100dvh;margin:0;padding:0;background:var(--bg);colo
   #content{padding:4px 6px 16px}
   .card{margin-bottom:6px}
   .hdr-title{font-size:15px}
+  .hdr-flight{font-size:clamp(18px,4vw,26px)}
   #clock-local{font-size:16px!important}
   #clock-pdt{font-size:13px!important}
   .mode-btn{font-size:12px;padding:5px 2px}
@@ -67,6 +68,10 @@ html,body{height:100%;height:100dvh;margin:0;padding:0;background:var(--bg);colo
 /* ── Header ── */
 .hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 .hdr-title{font-size:16px;font-weight:700;letter-spacing:-0.3px}
+/* Flight number, centred in the top banner (.109). flex:1 between two
+   shrink-proof groups, so it takes every spare pixel and ellipsizes rather
+   than ever pushing the clocks off the edge. */
+.hdr-flight{flex:1;min-width:0;text-align:center;padding:0 10px;font-size:clamp(20px,3.2vw,32px);font-weight:800;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1}
 .mode-row{display:flex;gap:5px;margin-top:5px}
 .mode-btn{flex:1;padding:4px 4px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
 .mode-btn.active{background:var(--blue-ll);border-color:var(--blue);color:var(--blue)}
@@ -238,17 +243,16 @@ function showUpdateBanner() {
 </div>
 <div id="header">
   <div class="hdr-top">
-    <div>
+    <div style="flex-shrink:0">
       <div style="display:flex;align-items:center;gap:8px">
         <div class="hdr-title">777 Flight</div>
         <div id="wt-restrict-badge" style="display:none"></div>
       </div>
       <div id="date-display" style="font-size:13px;color:var(--text2);margin-top:1px"></div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <button id="theme-toggle" onclick="toggleTheme()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">Light</button>
+    <div id="hdr-flight" class="hdr-flight"></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
       <button id="help-gear-btn" onclick="showSetupMenu()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">⚙</button>
-      <button id="phone-mode-btn" onclick="togglePhoneMode()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">Phone</button>
       <div class="hdr-time">
         <div id="clock-local" style="font-size:18px;font-weight:700;font-family:'SF Mono',monospace"></div>
         <div id="clock-pdt" style="font-size:18px;color:var(--text3)"></div>
@@ -545,11 +549,11 @@ function freqBlockHtml(page, title, fields, inline) {
 }
 
 // -- Protocol sync --
-const APP_BUILD = '2026-11-21.108'
+const APP_BUILD = '2026-11-21.109' + (IS_BETA ? '-beta' : '');
 // Shown by the i button on the update banner. The banner fetches these notes
 // out of the INCOMING index.html, so they always describe the build you are
 // about to load. Keep it short, plain, and free of apostrophes (.108).
-const BUILD_NOTES = 'Assisted mode: gear menu in the top bar with Help and Simplified switches. Help puts dotted underlines and ? badges on anything with a card - tap one to read it. Simplified hides advanced fields.\n\n107 help cards across every page.\n\nO/W and E/O landing distances compute from the AOM and QRH tables for an immediate return. Check them against the Land App before landing.\n\nATOW is the assumed takeoff weight: typing it now sets PTOW to ATOW minus 3,000 lb, and typing PTOW sets ATOW back. The old version had this backwards.\n\nCrossing ALT you typed is no longer overwritten when a plan loads.\n\nClimb Ltd boxes removed - a hand-set Yes/No told you nothing. Coming back if the approach climb limit chart turns up.\n\nArrival Temp / DP boxes squared up with a slash to match the label.' + (IS_BETA ? '-beta' : '');
+const BUILD_NOTES = 'The flight number now sits centred in the top banner, in the largest size that fits. It has been taken out of the nav bar at the bottom of all four pages.\n\nLight/Dark and Phone/iPad have moved off the top bar into the gear menu, beside Help and Simplified. Each button there shows the state you are in now.\n\nThe gear menu is also where Help lives: dotted underlines and ? badges on anything with a card.\n\nFixes the version label on the beta build, which stopped saying -beta in .108.\n\nNo computed number changed this build.';
 const PROTOCOL_SYNC_URL = 'https://protocol-sync.coochiesan.workers.dev';
 // Private CORS proxy (Cloudflare Worker, build .90). corsproxy.io began
 // answering HTTP 401 to unauthenticated requests (17 Oct 2026), which took
@@ -1094,6 +1098,26 @@ function showSetupMenu() {
   };
   pop.appendChild(row('Help', 'Dotted underlines and ? badges on anything with a card. Tap one to read it; buttons keep working.', 'help'));
   pop.appendChild(row('Simplified', 'Hides advanced and rarely used fields on every page. Buttons are untouched.', 'simple'));
+  // Theme and Layout moved off the top bar in .109. The button shows the state
+  // you are in now, not the one you would switch to.
+  const rowAct = (label, sub, on, onTxt, offTxt, fn) => {
+    const r = document.createElement('div');
+    r.style.cssText = 'display:flex;align-items:flex-start;gap:12px;margin-bottom:14px';
+    const txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0';
+    const l = document.createElement('div'); l.style.cssText = 'font-size:15px;font-weight:700;color:var(--text)'; l.textContent = label;
+    const sb = document.createElement('div'); sb.style.cssText = 'font-size:12px;color:var(--text3);line-height:1.4;margin-top:2px'; sb.textContent = sub;
+    txt.appendChild(l); txt.appendChild(sb);
+    const b = document.createElement('button');
+    b.textContent = on ? onTxt : offTxt;
+    b.style.cssText = 'padding:6px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;min-width:74px';
+    b.addEventListener('click', () => { pop.remove(); fn(); });
+    r.appendChild(txt); r.appendChild(b);
+    return r;
+  };
+  pop.appendChild(rowAct('Theme', 'Dark for the flight deck at night, light for daylight.',
+    document.body.classList.contains('light'), 'Light', 'Dark', () => toggleTheme()));
+  pop.appendChild(rowAct('Layout', 'Phone replaces the tabs with one large-text summary card.',
+    !!state.phoneMode, 'Phone', 'iPad', () => togglePhoneMode()));
   const cov = document.createElement('div');
   cov.style.cssText = 'font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;line-height:1.5';
   cov.textContent = 'This page: ' + UI_COVERAGE.labels + ' labels and ' + UI_COVERAGE.buttons + ' buttons with cards, ' + UI_COVERAGE.gaps + ' labels without. ' + Object.keys(HELP_CARDS).length + ' cards written.';
@@ -1127,6 +1151,8 @@ function render() {
   }
   else if (tab === 'layover') renderLayover(c);
   setTimeout(() => { if (typeof updateAtisAges === 'function') updateAtisAges(); }, 0);   // ATIS age badges (.91)
+  { const hf = document.getElementById('hdr-flight');   // centred flight title (.109)
+    if (hf) { const f = currentFlight(); hf.textContent = (f && f.flightNum) ? 'American ' + f.flightNum : 'American \u2014'; } }
   uiApply();   // help markers + simplified fields (.106)
 }
 
@@ -3395,9 +3421,6 @@ function renderPreflight(c) {
   nav.innerHTML=''
     +(flightIdx===0?'<button disabled style="background:none;border:none;border-right:1px solid var(--border);padding:7px 11px;color:var(--text3);font-size:12px;line-height:1;flex-shrink:0">&#8592;</button>':'<button onclick="shiftFlight(-1)" style="background:none;border:none;border-right:1px solid var(--border);padding:7px 11px;cursor:pointer;color:var(--text);font-size:12px;line-height:1;flex-shrink:0">&#8592;</button>')
     +(ttdStr?'<div style="padding:6px 10px;text-align:center;border-right:1px solid var(--border);flex-shrink:0"><div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px">Dep in</div><div id="dep-in-timer" style="font-size:20px;font-weight:800;font-family:SF Mono,monospace;color:'+ttdColor+'">'+ttdStr+'</div></div>':'')
-    +'<div style="padding:4px 10px;border-right:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;min-width:120px">'
-    +'<span style="font-size:25px;font-weight:800;color:var(--blue);white-space:nowrap">'+(fl.flightNum?'American '+fl.flightNum:'American —')+'</span>'
-    +'</div>'
     +'<div style="flex:1;text-align:center;padding:4px 6px;min-width:0;overflow:hidden"><div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+routeStr+'</div><div style="font-size:11px;color:var(--text3);margin-top:1px">Flight '+(flightIdx+1)+' of '+totalFlights+' · ← prev · → next / new · v'+APP_BUILD+'</div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:5px 8px;border-left:1px solid var(--border);flex-shrink:0">'
     +'<input type="text" placeholder="Capt" maxlength="12" value="'+(fl.crewN1||'')+'" style="padding:3px 6px;border-radius:4px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:11px;font-weight:600;width:72px;text-align:center" onchange="setFlight(\'crewN1\',this.value)" />'
@@ -5511,7 +5534,6 @@ const now = new Date();
   const depLabel = fl.depCity && fl.depDate ? `${fl.depCity} → ${fl.arrCity || '?'} · ${fl.depDate}` : `Flight ${flightIdx + 1}`;
   html += `<div style="display:flex;align-items:center;background:var(--surf);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden">
     <button onclick="shiftFlight(-1)" style="background:none;border:none;border-right:1px solid var(--border);padding:10px 14px;cursor:pointer;color:${flightIdx===0?'var(--text3)':'var(--text)'};font-size:12px;line-height:1;flex-shrink:0" ${flightIdx===0?'disabled':''}>&#8592;</button>
-    ${fl.flightNum ? `<div style="padding:6px 12px;border-right:1px solid var(--border);flex-shrink:0;display:flex;align-items:center"><span style="font-size:20px;font-weight:800;color:var(--blue);white-space:nowrap">American ${fl.flightNum}</span></div>` : ''}
     <div style="flex:1;text-align:center;padding:8px 4px">
       <div style="font-size:13px;font-weight:600;color:var(--text)">${depLabel}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:2px">Flight ${flightIdx+1} of ${totalFlights} · ← prev · → next / new</div>
@@ -6379,7 +6401,6 @@ function renderRedispatch(c) {
   const crewInput = (key,lbl,val) => `<input type="text" placeholder="${lbl}" maxlength="12" value="${(val||'').replace(/"/g,'&quot;')}" style="padding:3px 6px;border-radius:4px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:11px;font-weight:600;width:72px;text-align:center" onchange="setFlight('${key}',this.value)" />`;
   let html = `<div style="display:flex;align-items:center;background:var(--surf);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden">
     <button onclick="shiftFlight(-1)" style="background:none;border:none;border-right:1px solid var(--border);padding:10px 14px;cursor:pointer;color:${flightIdx===0?'var(--text3)':'var(--text)'};font-size:12px;line-height:1;flex-shrink:0" ${flightIdx===0?'disabled':''}>&#8592;</button>
-    ${fl.flightNum ? `<div style="padding:6px 12px;border-right:1px solid var(--border);flex-shrink:0;display:flex;align-items:center"><span style="font-size:20px;font-weight:800;color:var(--amber);white-space:nowrap">American ${fl.flightNum}</span></div>` : ''}
     <div style="flex:1;text-align:center;padding:8px 4px">
       <div style="font-size:13px;font-weight:600;color:var(--text)">${depLabel}</div>
       <div style="font-size:12px;color:var(--amber);margin-top:2px;font-weight:700">&#x26A1; Redispatch · ${rdPt}${isActive ? ' \u2714 \u2192 '+rdAirport : ''}</div>
@@ -7997,7 +8018,6 @@ function renderArrival(c) {
   const depLabel = fl.depCity && fl.depDate ? `${fl.depCity} → ${fl.arrCity || '?'} · ${fl.depDate}` : `Flight ${flightIdx + 1}`;
   html += `<div style="display:flex;align-items:center;background:var(--surf);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden">
     <button onclick="shiftFlight(-1)" style="background:none;border:none;border-right:1px solid var(--border);padding:10px 14px;cursor:pointer;color:${flightIdx===0?'var(--text3)':'var(--text)'};font-size:12px;line-height:1;flex-shrink:0" ${flightIdx===0?'disabled':''}>&#8592;</button>
-    ${fl.flightNum ? `<div style="padding:6px 12px;border-right:1px solid var(--border);flex-shrink:0;display:flex;align-items:center"><span style="font-size:20px;font-weight:800;color:var(--blue);white-space:nowrap">American ${fl.flightNum}</span></div>` : ''}
     <div style="flex:1;text-align:center;padding:8px 4px">
       <div style="font-size:13px;font-weight:600;color:var(--text)">${depLabel}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:2px">Flight ${flightIdx+1} of ${totalFlights} · ← prev · → next / new</div>
