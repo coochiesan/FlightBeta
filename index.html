@@ -501,20 +501,20 @@ function migrateOceanicNotesToGlobalStore() {
 // every bit of code that asks "is this a light theme?" still gets the right
 // answer. cls is applied in order; the CSS blocks sit after body.light.
 const THEME_PRESETS = [
-  { id:'dark1', name:'Dark 1',   cls:'',               meta:'#0a0c0f' },
   { id:'day',   name:'Day',      cls:'light',          meta:'#F5F4F0' },
   { id:'hc',    name:'Contrast', cls:'light theme-hc', meta:'#FFFFFF' },
-  { id:'dark2', name:'Dark 2',   cls:'theme-dark2',    meta:'#000000' },
+  { id:'dark1', name:'Night 1',  cls:'',               meta:'#0a0c0f' },
+  { id:'dark2', name:'Night 2',  cls:'theme-dark2',    meta:'#000000' },
 ];
 function themePreset() {
   const id = uiPrefs().theme;
-  return THEME_PRESETS.find(p => p.id === id) || THEME_PRESETS[0];
+  return THEME_PRESETS.find(p => p.id === id) || THEME_PRESETS.find(p => p.id === 'dark1');
 }
 function applyTheme(id) {
   // 'light' and 'dark' still accepted, so an old stored value or an old call
   // site lands on the right preset instead of silently doing nothing.
   const want = id === 'light' ? 'day' : id === 'dark' ? 'dark1' : id;
-  const p = THEME_PRESETS.find(x => x.id === want) || THEME_PRESETS[0];
+  const p = THEME_PRESETS.find(x => x.id === want) || THEME_PRESETS.find(x => x.id === 'dark1');
   const b = document.body;
   b.classList.remove('light', 'theme-hc', 'theme-dark2');
   if (p.cls) p.cls.split(' ').forEach(c => b.classList.add(c));
@@ -552,8 +552,8 @@ function atisAgeMinutes(text) {
   const t = String(text || '');
   const now = new Date();
   let issued = null;
-  const m6 = t.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
-  const m4 = t.match(/\b(\d{2})(\d{2})Z\b/);
+  const m6 = t.match(/\b(\d{2})(\d{2})(\d{2}) ?Z\b/i);
+  const m4 = t.match(/\b(\d{2})(\d{2}) ?Z\b/i);
   if (m6 && +m6[1] >= 1 && +m6[1] <= 31 && +m6[2] < 24 && +m6[3] < 60 && (!m4 || m6.index <= m4.index)) {
     let y = now.getUTCFullYear(), mo = now.getUTCMonth();
     if (+m6[1] > now.getUTCDate()) { mo -= 1; if (mo < 0) { mo = 11; y -= 1; } }
@@ -679,11 +679,11 @@ function freqBlockHtml(page, title, fields, inline) {
 }
 
 // -- Protocol sync --
-const APP_BUILD = '2026-11-21.118' + (IS_BETA ? '-beta' : '');
+const APP_BUILD = '2026-11-21.120' + (IS_BETA ? '-beta' : '');
 // Shown by the i button on the update banner. The banner fetches these notes
 // out of the INCOMING index.html, so they always describe the build you are
 // about to load. Keep it short, plain, and free of apostrophes (.108).
-const BUILD_NOTES = 'Four colour themes. Tap Theme in the gear menu to cycle them.\n\nDark 1 is the scheme you have been flying, unchanged. Dark 2 takes the light out of everything that is not telling you something: near-black surfaces, dimmed text, and the white gone from filled buttons - but red, amber and green keep their brightness, because those two in particular get hard to tell apart as things dim. Day is for a hotel room. Contrast is for bright sun: white ground, black text, the mid greys stripped out and heavier borders.\n\nThe theme is now a setting on this iPad rather than part of the flight, so it no longer travels when you share a flight.';
+const BUILD_NOTES = 'Theme buttons now run Day, Contrast, Night 1, Night 2.\n\nThe dateline warning says in plain words whether the arrival date is ahead of, behind or the same as the departure date.\n\nThe ATIS card now explains the AGE badge, and the Arrival Notes card has been rewritten.';
 const PROTOCOL_SYNC_URL = 'https://protocol-sync.coochiesan.workers.dev';
 // Private CORS proxy (Cloudflare Worker, build .90). corsproxy.io began
 // answering HTTP 401 to unauthenticated requests (17 Oct 2026), which took
@@ -982,7 +982,7 @@ const HELP_CARDS = {
   "pln arr fuel": ["Planned Arrival Fuel", "Fuel the release expects at the destination."],
   "arr fuel hrs+mins": ["Arrival Fuel as Endurance", "The same planned arrival fuel expressed as time remaining \u2014 easier to reason about when holding or diverting."],
   // ── Preflight · weather ─────────────────────────────────────────
-  "atis text": ["ATIS Text Box", "Paste the raw ATIS here and the app scrapes the letter, temperature, altimeter and wind out of it. In FD Pro the ATIS is one-touch copy \u2014 copy it there, tap this box and paste, which beats Fetch at a field with no digital ATIS. The age badge times from the paste."],
+  "atis text": ["ATIS Text Box", "Paste the raw ATIS here and the app scrapes the letter, temperature, altimeter and wind out of it. In FD Pro the ATIS is one-touch copy \u2014 copy it there, tap this box and paste, which beats Fetch at a field with no digital ATIS. The AGE badge in the corner of the box counts from the time stamped in the ATIS itself, not from when you pasted it: green up to an hour old, amber past 60 minutes, red past two hours. Amber or red means get a newer one."],
   "atis": ["ATIS Letter", "The current information letter. Fetch fills it; the age badge beside the box turns amber past 60 minutes and red past 2 hours."],
   "rwy": ["Runway", "The runway in use. Selecting it pulls that runway\u2019s takeoff data, drives the crosswind and headwind/tailwind calculation, and sets the wind correction used in the landing distances."],
   "runway": ["Runway Selector", "Every runway the release planned takeoff data for. Picking one loads its flaps, thrust, V-speeds, assumed temperature and limit weight. Add Runway allows entry by hand."],
@@ -1057,8 +1057,10 @@ const HELP_CARDS = {
   "btn:clear": ["Clear Weather", "Empties the letter, temperature, altimeter, wind and text, and puts the cursor in the box ready for a fresh paste."],
   "btn:takeoff brief": ["Takeoff Brief", "The spoken brief in order: weights against limits, margin to the assumed takeoff weight, winds, temperature against assumed, thrust and flaps, noise procedure and minimum takeoff fuel. Amber prompts mark anything needing review. Red prompts mark anything not yet entered or out of limits."],
   "btn:flight brief": ["Flight Brief", "Departure briefing prompts with this flight\u2019s live numbers: taxi, departure procedure, noise abatement, engine-out acceleration altitude and the stopping distances."],
-  "btn:legs page": ["Legs Page", "Full-screen waypoint table \u2014 ident, latitude and longitude, level, distance, time and fuel \u2014 for cross-checking the box against the plan."],
+  "legs": ["Legs", "The waypoint table from the flight plan \u2014 ident, latitude and longitude, level, distance, time and fuel \u2014 for cross-checking the box against the plan. Tap the header to open or close it; it stays as you leave it on this iPad. Level changes are tinted, the redispatch point is marked R/D. An amber dot and \u0022may be incomplete\u0022 mean the last entry is not the destination preceded by RWY, so re-check the source plan."],
   "btn:reference guide": ["Reference Guide", "The Europe or Pacific operations reference pages for this route. Cached on the first online launch, so they open with no connection."],
+  "btn:arrival notes": ["Arrival Notes", "Your own notes for this arrival city \u2014 the arrival, the approach, taxi-in, anything worth remembering next time. Saved by city, not by flight, so they come back every time you fly in here."],
+  "critical fuel scenario": ["Critical Fuel Scenario (ETP)", "The equal-time points from the flight plan: the waypoint pair, the ETP position and REMF, the fuel remaining there. The position is already rewritten in the format the FD Pro Decision Point field accepts, so tap Copy on a row and paste it straight into FD Pro with no retyping. Tap the header to open or close the table."],
   "btn:dep notes": ["Departure Notes", "Your own notes for this departure city. Saved by city, not by flight, so they come back every time you fly out of here."],
   "btn:gate pa": ["Gate PA", "Welcome-aboard announcement with this flight\u2019s times, distance, route and weather already filled in. Edit rewrites the wording and keeps it on this iPad for every future flight."],
   "btn:cruise pa": ["Cruise PA", "Top-of-climb announcement, filled from the plan. Edit to make the wording yours, and then stored on this iPad for future flights."],
@@ -1255,8 +1257,31 @@ function showSetupMenu() {
     r.appendChild(txt); r.appendChild(b);
     return r;
   };
-  pop.appendChild(rowAct('Theme', 'Dark 1 for the flight deck, Dark 2 dimmer still with the white taken out, Day for a hotel room, Contrast for bright sun.',
-    true, themePreset().name, themePreset().name, () => cycleTheme()));
+  // Theme is four buttons rather than a cycle (.119): any preset is one tap.
+  {
+    const cur = themePreset().id;
+    const r = document.createElement('div');
+    r.style.cssText = 'margin-bottom:14px';
+    const l = document.createElement('div');
+    l.style.cssText = 'font-size:15px;font-weight:700;color:var(--text)'; l.textContent = 'Theme';
+    const sb = document.createElement('div');
+    sb.style.cssText = 'font-size:12px;color:var(--text3);line-height:1.4;margin-top:2px';
+    sb.textContent = 'Day for a hotel room, Contrast for bright sun, Night 1 for the flight deck, Night 2 dimmer still with the white taken out.';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;margin-top:8px';
+    THEME_PRESETS.forEach(t => {
+      const on = t.id === cur;
+      const b = document.createElement('button');
+      b.textContent = t.name;
+      b.style.cssText = 'flex:1;padding:8px 4px;border-radius:8px;border:1px solid ' + (on ? 'var(--blue)' : 'var(--border2)')
+        + ';background:' + (on ? 'var(--blue-l)' : 'var(--surf2)') + ';color:' + (on ? 'var(--blue)' : 'var(--text3)')
+        + ';font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap';
+      b.addEventListener('click', () => { pop.remove(); setTheme(t.id); });
+      row.appendChild(b);
+    });
+    r.appendChild(l); r.appendChild(sb); r.appendChild(row);
+    pop.appendChild(r);
+  }
   pop.appendChild(rowAct('Layout', 'Phone replaces the tabs with one large-text summary card.',
     !!state.phoneMode, 'Phone', 'iPad', () => togglePhoneMode()));
   const cov = document.createElement('div');
@@ -4771,11 +4796,8 @@ function renderPreflight(c) {
   rgBtn.style.cssText='flex:1;padding:8px;border-radius:8px;border:1px solid var(--teal);background:var(--teal-l);color:var(--teal);font-size:12px;font-weight:700;cursor:pointer';
   rgBtn.addEventListener('click',()=>showRefGuide(fl.depCity, fl.arrCity, fl.flightNum));
 
-  // Legs Page button
-  const lpBtn=document.createElement('button'); lpBtn.textContent='Legs Page'+(fl.legsIncomplete?' ⚠️':'');
-  lpBtn.title=fl.legsIncomplete?'Waypoint list may be incomplete — last entry isn\'t the destination preceded by RWY. Re-check the source flight plan.':'';
-  lpBtn.style.cssText='flex:1;padding:8px;border-radius:8px;border:1px solid var(--teal);background:var(--teal-l);color:var(--teal);font-size:12px;font-weight:700;cursor:pointer'+(fl.legs?'':';opacity:0.45');
-  lpBtn.addEventListener('click',()=>showLegsPage());
+  // Legs Page button removed in .119 - the waypoints are a collapsible card
+  // under the Route card now, and the incomplete-list warning moved there.
 
   // Departure Notes button
   const dnBtn=document.createElement('button');
@@ -5016,7 +5038,6 @@ function renderPreflight(c) {
     document.body.appendChild(pop);
   });
   btnRow.appendChild(paButton('gate'));   // Gate PA — far left (.93)
-  btnRow.appendChild(lpBtn);
   btnRow.appendChild(rgBtn);
   btnRow.appendChild(dnBtn);
   btnRow.appendChild(fbBtn);
@@ -5058,6 +5079,63 @@ function renderPreflight(c) {
   routeBody.appendChild(routeText);
   routeCard.appendChild(routeBody);
   c.appendChild(routeCard);
+
+  // ── Legs card (.119) ──────────────────────────────────────────────────────
+  // Was a button opening a full-screen page. Collapsed by default, because the
+  // preflight page is long; open/closed is remembered per device in
+  // flight_ui_prefs, so a Share never carries it.
+  {
+    let legRows = [];
+    try { legRows = JSON.parse(fl.legs || '[]'); } catch (e) {}
+    const legsCard = document.createElement('div');
+    legsCard.className = 'card';
+    legsCard.style.cssText = 'margin-bottom:5px;flex-shrink:0';
+
+    const legsOpen = !!uiPrefs().legsOpen && legRows.length > 0;
+    const hdr = document.createElement('div');
+    hdr.className = 'card-hdr';
+    hdr.style.cursor = legRows.length ? 'pointer' : 'default';
+    const left = document.createElement('div'); left.className = 'card-hdr-left';
+    const dot = document.createElement('div'); dot.className = 'card-dot';
+    dot.style.background = fl.legsIncomplete ? 'var(--amber)' : 'var(--teal)';
+    const ttl = document.createElement('div'); ttl.className = 'card-title';
+    ttl.textContent = 'Legs';
+    ttl.dataset.helpKey = 'legs';
+    left.appendChild(dot); left.appendChild(ttl);
+    hdr.appendChild(left);
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;align-items:center;gap:8px';
+    const count = document.createElement('div');
+    count.style.cssText = 'font-size:10px;font-weight:600;color:' + (fl.legsIncomplete ? 'var(--amber)' : 'var(--text3)');
+    count.textContent = legRows.length
+      ? legRows.length + ' waypoints' + (fl.legsIncomplete ? ' \u00b7 may be incomplete' : '')
+      : 'No legs loaded';
+    right.appendChild(count);
+    if (legRows.length) {
+      const chv = document.createElement('div');
+      chv.style.cssText = 'font-size:11px;color:var(--text3);transition:transform 0.2s' + (legsOpen ? ';transform:rotate(180deg)' : '');
+      chv.textContent = '\u25BC';
+      right.appendChild(chv);
+      hdr.addEventListener('click', () => setUiPref('legsOpen', !uiPrefs().legsOpen));
+    }
+    hdr.appendChild(right);
+    legsCard.appendChild(hdr);
+
+    if (legRows.length && legsOpen) {
+      const bodyWrap = document.createElement('div');
+      bodyWrap.style.cssText = 'max-height:420px;overflow-y:auto;-webkit-overflow-scrolling:touch';
+      bodyWrap.appendChild(buildLegsTable(legRows, (fl.rdPt || '').toUpperCase()));
+      legsCard.appendChild(bodyWrap);
+      if (fl.legsIncomplete) {
+        const warn = document.createElement('div');
+        warn.style.cssText = 'padding:8px 14px;font-size:12px;color:var(--amber);line-height:1.5;border-top:1px solid var(--border)';
+        warn.textContent = 'The last entry is not the destination preceded by RWY, so the waypoint list may be incomplete. Re-check the source flight plan.';
+        legsCard.appendChild(warn);
+      }
+    }
+    c.appendChild(legsCard);
+  }
 
   // ── Departure field report — very bottom, same card as Arrival (.88) ──
   {
@@ -5643,16 +5721,18 @@ const now = new Date();
   // IDL crossing detection — Pacific routes from US West/East
   const IDL_PAC = ['AKL','SYD','NRT','HND'];
   const IDL_US  = ['LAX','PHX','DFW','JFK','CLT','MIA'];
+  // .119 - built from the times actually entered rather than a guess per city
+  // pair. dayDiff is the calendar gap between the two LOCAL dates as typed;
+  // flightMins is already the real en-route time, offsets applied.
   const idlNote = (() => {
     if (!depDate) return null;
-    if (IDL_PAC.includes(arrCity) && IDL_US.includes(depCity)) {
-      const days = (arrCity === 'AKL' || arrCity === 'SYD') ? '+2 days' : '+1 or +2 days';
-      return { dir:'westbound', note:`Crosses IDL — arrival is ${days} local at ${arrCity}. Ensure arrival date reflects local ${arrCity} date.` };
-    }
-    if (IDL_PAC.includes(depCity) && (IDL_US.includes(arrCity) || arrCity === 'LHR')) {
-      return { dir:'eastbound', note:`Crosses IDL eastbound — arrival may be same calendar day or a day earlier local at ${arrCity}. Arrival date should reflect local ${arrCity} date.` };
-    }
-    return null;
+    const west = IDL_PAC.includes(arrCity) && IDL_US.includes(depCity);
+    const east = IDL_PAC.includes(depCity) && (IDL_US.includes(arrCity) || arrCity === 'LHR');
+    if (!west && !east) return null;
+    const dayNum = d => Date.UTC(+d.slice(0,4), +d.slice(5,7) - 1, +d.slice(8,10));
+    const dayDiff = (depDate && arrDate) ? Math.round((dayNum(arrDate) - dayNum(depDate)) / 86400000) : null;
+    const enrMin = (flightMins !== null && flightMins > 0) ? flightMins : null;
+    return { dir: west ? 'westbound' : 'eastbound', west, dayDiff, enrMin };
   })();
 
   const localNow = new Date(utc + depOff * 60000);
@@ -5752,7 +5832,7 @@ const now = new Date();
         style="flex:1;padding:12px 6px;border-radius:10px;border:1px solid var(--purple);background:var(--purple-l);color:var(--purple);font-size:12px;font-weight:700;cursor:pointer;text-align:center;letter-spacing:0.2px">
         CREW SWAP
       </button>
-      <button onclick="showOceanicNotes(oceanicNotesTheatre(fl.depCity, fl.arrCity) || 'General')"
+      <button onclick="showOceanicNotes('${oceanicNotesTheatre(fl.depCity, fl.arrCity) || 'General'}')"
         style="flex:1;padding:12px 6px;border-radius:10px;border:1px solid var(--blue);background:var(--blue-ll);color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;text-align:center;letter-spacing:0.2px">
         📋 ${oceanicNotesTheatre(fl.depCity, fl.arrCity) || 'Oceanic'} Notes${(state.oceanicNotesByTheatre && state.oceanicNotesByTheatre[oceanicNotesTheatre(fl.depCity, fl.arrCity) || 'General']) ? ' ●' : ''}
       </button>
@@ -5929,7 +6009,7 @@ const now = new Date();
           }).join('')+'</tbody>';
           return '<div style="border-top:1px solid var(--border)">'
             +'<div onclick="var b=document.getElementById(\''+etpId+'\');var c=document.getElementById(\''+etpId+'-chv\');if(b){var open=b.style.display!==\'none\';b.style.display=open?\'none\':\'block\';c.style.transform=open?\'\':\' rotate(180deg)\';}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none">'
-            +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px">Critical Fuel Scenario (ETP) \u00b7 '+etps.length+' point'+(etps.length===1?'':'s')+'</div>'
+            +'<div data-help-key="critical fuel scenario" style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px">Critical Fuel Scenario (ETP) \u00b7 '+etps.length+' point'+(etps.length===1?'':'s')+'</div>'
             +'<div id="'+etpId+'-chv" style="font-size:11px;color:var(--text3);transition:transform 0.2s">\u25BC</div>'
             +'</div>'
             +'<div id="'+etpId+'" style="display:none;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 14px 10px">'
@@ -5992,16 +6072,34 @@ const now = new Date();
   html += timersHtml;
   // ── IDL notice ───────────────────────────────────────────────────────────
   if (idlNote) {
-    const idlColor = idlNote.dir === 'westbound' ? 'var(--amber)' : 'var(--blue)';
-    const idlBg    = idlNote.dir === 'westbound' ? 'var(--amber-l)' : 'var(--blue-ll)';
-    const dayNote  = idlNote.dir === 'westbound'
-      ? (arrCity === 'AKL' || arrCity === 'SYD' ? '+2 days' : '+1 or +2 days')
-      : 'same or −1 day';
+    const idlColor = idlNote.west ? 'var(--amber)' : 'var(--blue)';
+    const idlBg    = idlNote.west ? 'var(--amber-l)' : 'var(--blue-ll)';
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const stamp = (d, t) => {
+      if (!d) return '';
+      const dt = new Date(d + 'T' + (t || '00:00'));
+      if (isNaN(dt)) return '';
+      return DAYS[dt.getDay()].slice(0, 3) + ' ' + dt.getDate() + ' ' + MON[dt.getMonth()] + (t ? ' ' + t : '');
+    };
+    const dd = idlNote.dayDiff;
+    const dayNote = dd === null ? 'arrival date not set'
+      : dd === 0 ? 'arrival date is the same as departure'
+      : 'arrival date is ' + Math.abs(dd) + ' day' + (Math.abs(dd) === 1 ? '' : 's') + (dd > 0 ? ' ahead of' : ' behind') + ' departure';
+    const enr = idlNote.enrMin === null ? ''
+      : Math.floor(idlNote.enrMin / 60) + 'h ' + String(idlNote.enrMin % 60).padStart(2, '0') + 'm en route';
+    const legs = (depDate && arrDate)
+      ? depCity + ' ' + stamp(depDate, depTime) + ' → ' + arrCity + ' ' + stamp(arrDate, arrTime) + ' local'
+      : 'Enter both dates and times for the day count.';
+    // A Pacific crossing runs roughly 9-17 h. Well outside that and the
+    // arrival date is the usual culprit, so say so rather than imply the
+    // day count is right.
+    const odd = idlNote.enrMin !== null && (idlNote.enrMin < 240 || idlNote.enrMin > 1320);
     html += `<div style="background:${idlBg};border:1px solid ${idlColor};border-radius:var(--radius);padding:10px 14px;margin-bottom:8px">
       <div style="font-size:13px;font-weight:700;color:${idlColor};margin-bottom:4px">
-        IDL CROSSING — ${idlNote.dir.toUpperCase()} · arrival ${dayNote} local
+        IDL CROSSING — ${idlNote.dir.toUpperCase()} · ${dayNote}
       </div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.5">${idlNote.note}</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.5">${legs}${enr ? ' · ' + enr : ''}</div>
+      ${odd ? `<div style="font-size:13px;color:var(--red);line-height:1.5;margin-top:3px">That en-route time is outside the normal range for this crossing — check the arrival date.</div>` : ''}
     </div>`;
   }
   if (flightNeg && flightMins !== null) {
@@ -6009,7 +6107,7 @@ const now = new Date();
       <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:4px">ARRIVAL DATE ERROR — negative flight time</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.5">
         The calculated flight time is negative. Check the arrival date — it is likely set to the wrong day.
-        ${idlNote ? 'For this Pacific route, try setting arrival date to +1 or +2 days from departure.' : 'Adjust arrival date and recheck.'}
+        ${idlNote ? (idlNote.west ? 'Westbound across the dateline, the arrival date is normally +1 or +2 days from departure.' : 'Eastbound across the dateline, the arrival date is normally the same day as departure or the day before.') : 'Adjust arrival date and recheck.'}
       </div>
     </div>`;
   }
@@ -7097,38 +7195,10 @@ function showShareFlightPopup() {
   document.body.appendChild(pop);
 }
 
-function showLegsPage() {
-  const ex = document.getElementById('legs-page-pop');
-  if (ex) { ex.remove(); return; }
-
-  const fl = currentFlight();
-  let rows = [];
-  try { rows = JSON.parse(fl.legs || '[]'); } catch(e) {}
-  if (!rows.length) return;
-
-  const rdPtIdent = (fl.rdPt || '').toUpperCase();
-
-  const pop = document.createElement('div');
-  pop.id = 'legs-page-pop';
-  pop.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column';
-
-  // ── Header bar ──
-  const bar = document.createElement('div');
-  bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:48px 16px 10px;background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px';
-  const ttl = document.createElement('div');
-  ttl.style.cssText = 'font-size:14px;font-weight:700;color:var(--teal);flex:1';
-  ttl.textContent = 'Legs Page \u00b7 ' + rows.length + ' waypoints';
-  const cls = document.createElement('button');
-  cls.textContent = '\u2715 Close';
-  cls.style.cssText = 'padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer';
-  cls.addEventListener('click', () => pop.remove());
-  bar.appendChild(ttl); bar.appendChild(cls);
-  pop.appendChild(bar);
-
-  // ── Scrollable table body ──
-  const body = document.createElement('div');
-  body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch';
-
+// Legs table, shared by the collapsible Legs card on the preflight page (.119).
+// Lifted unchanged out of the old full-screen Legs Page, which went away with
+// its button.
+function buildLegsTable(rows, rdPtIdent) {
   // Altitude-change detection (same logic as Flight Tab legs table)
   const flArr = rows.map(r => r.fl || '');
   const flCount = {};
@@ -7188,10 +7258,9 @@ function showLegsPage() {
       + '</tr>';
   });
   table.appendChild(tbody);
-  body.appendChild(table);
-  pop.appendChild(body);
-  document.body.appendChild(pop);
+  return table;
 }
+
 
 function openClockAlarm(hour, min, label) {
   const h = String(hour % 24).padStart(2,'0');
@@ -8286,12 +8355,12 @@ function renderArrival(c) {
   </div>`;
 
   // ── Approach Brief + Approach Notes + Arrival Notes buttons ─────────────
-  const apprNotesIndicator = (state.arrNotesByCity && state.arrNotesByCity[arrCity]) ? ' ●' : '';
+  // .119 - Approach Notes used to sit beside this on the same stored note, so
+  // the two buttons were one notepad under two names. One button now.
   const arrNotesIndicator  = (state.arrNotesByCity && state.arrNotesByCity[arrCity]) ? ' ●' : '';
   html += `<div style="display:flex;gap:8px;margin-bottom:8px">
     <button onclick="showPA('descent')" style="flex:1;padding:14px 8px;border-radius:10px;border:1px solid var(--purple);background:var(--purple-l);color:var(--purple);font-size:13px;font-weight:700;cursor:pointer;text-align:center">Descent PA</button>
     <button onclick="showApproachBrief()" style="flex:1;padding:14px 8px;border-radius:10px;border:1px solid var(--green);background:var(--green-l);color:var(--green);font-size:13px;font-weight:700;cursor:pointer;text-align:center">🛬 Approach Brief — ${arrCity}</button>
-    <button onclick="showApproachNotes()" style="flex:1;padding:14px 8px;border-radius:10px;border:1px solid var(--teal);background:var(--teal-l);color:var(--teal);font-size:13px;font-weight:700;cursor:pointer;text-align:center">📋 Approach Notes${apprNotesIndicator}</button>
     <button onclick="showArrivalNotes()" style="flex:1;padding:14px 8px;border-radius:10px;border:1px solid var(--blue);background:var(--blue-ll);color:var(--blue);font-size:13px;font-weight:700;cursor:pointer;text-align:center">📋 Arrival Notes${arrNotesIndicator}</button>
   </div>`;
 
@@ -8556,157 +8625,6 @@ function showApproachBrief() {
   document.body.appendChild(pop);
 }
 
-function showApproachNotes() {
-  if (document.getElementById('approach-notes-pop')) { document.getElementById('approach-notes-pop').remove(); return; }
-  const fl = state.flights ? (state.flights[state.flightIdx] || {}) : (state.flight || {});
-  const arrCity = fl.arrCity || 'default';
-  if (!state.arrNotesByCity) state.arrNotesByCity = {};
-  const currentNote = state.arrNotesByCity[arrCity] || '';
-  const p = document.createElement('div'); p.id = 'approach-notes-pop';
-  p.style.cssText = 'position:fixed;top:40px;left:0;right:0;bottom:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;border-top:1px solid var(--border)';
-  const bar = document.createElement('div');
-  bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:48px 16px 8px;background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0';
-  const ttl = document.createElement('div'); ttl.style.cssText = 'font-size:14px;font-weight:700;color:var(--text)';
-  ttl.textContent = 'Approach Notes — ' + arrCity;
-  const cls = document.createElement('button'); cls.textContent = '✕ Close';
-  cls.style.cssText = 'padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer';
-  cls.addEventListener('click', () => p.remove());
-  bar.appendChild(ttl); bar.appendChild(cls); p.appendChild(bar);
-  const body = document.createElement('div');
-  body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px';
-  const ta = document.createElement('textarea');
-  ta.placeholder = 'Approach notes for ' + arrCity + '...';
-  ta.value = currentNote;
-  ta.style.cssText = 'width:100%;min-height:180px;background:transparent;border:none;outline:none;color:var(--text);font-size:14px;line-height:1.8;resize:none;font-family:inherit';
-  ta.addEventListener('input', e => {
-    if (!state.arrNotesByCity) state.arrNotesByCity = {};
-    if (e.target.value.trim()) state.arrNotesByCity[arrCity] = e.target.value;
-    else delete state.arrNotesByCity[arrCity];
-    saveState();
-  });
-  addNotesPaste(bar, cls, ta);
-  body.appendChild(ta);
-
-  // ── Approach Frequencies — freeform North / South Arrival columns ────────
-  // LHR-only — Heathrow's Northside/Southside runway configuration is what
-  // makes a North/South split meaningful; other airports don't need it.
-  // Each column is a user-managed list of {label, freq} rows (add/remove as
-  // needed — no fixed label set, since not every airport's arrivals map
-  // cleanly to a preset list). Font size is adjustable (A-/A+) and the
-  // choice is remembered per flight.
-  const isLHR = ['LHR', 'EGLL'].includes((arrCity || '').toUpperCase());
-  if (isLHR) {
-  const freqWrap = document.createElement('div');
-  freqWrap.style.cssText = 'margin-top:18px;border-top:1px solid var(--border);padding-top:14px';
-
-  const freqHdrRow = document.createElement('div');
-  freqHdrRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
-  const freqTitle = document.createElement('div');
-  freqTitle.style.cssText = 'font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.7px';
-  freqTitle.textContent = 'Frequencies';
-  const sizeCtl = document.createElement('div');
-  sizeCtl.style.cssText = 'display:flex;align-items:center;gap:4px';
-  const FREQ_SIZES = { sm: 11, md: 13, lg: 16 };
-  const FREQ_SIZE_ORDER = ['sm', 'md', 'lg'];
-  let curFreqSize = FREQ_SIZES[fl.apprFreqFontSize] ? fl.apprFreqFontSize : 'md';
-  const sizeBtnStyle = 'padding:4px 9px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer';
-  const minusBtn = document.createElement('button'); minusBtn.textContent = 'A-'; minusBtn.style.cssText = sizeBtnStyle;
-  const plusBtn  = document.createElement('button'); plusBtn.textContent  = 'A+'; plusBtn.style.cssText  = sizeBtnStyle;
-  sizeCtl.appendChild(minusBtn); sizeCtl.appendChild(plusBtn);
-  freqHdrRow.appendChild(freqTitle); freqHdrRow.appendChild(sizeCtl);
-  freqWrap.appendChild(freqHdrRow);
-
-  const freqCols = document.createElement('div');
-  freqCols.style.cssText = 'display:flex;gap:10px';
-  freqWrap.appendChild(freqCols);
-
-  if (!fl.arrFreqs || typeof fl.arrFreqs !== 'object') fl.arrFreqs = {};
-  if (!fl.arrFreqs[arrCity] || typeof fl.arrFreqs[arrCity] !== 'object') fl.arrFreqs[arrCity] = { north: [], south: [] };
-  const freqData = fl.arrFreqs[arrCity];
-  if (!Array.isArray(freqData.north)) freqData.north = [];
-  if (!Array.isArray(freqData.south)) freqData.south = [];
-
-  function persistFreqs() {
-    const fl2 = state.flights ? (state.flights[state.flightIdx] || {}) : (state.flight || {});
-    if (!fl2.arrFreqs || typeof fl2.arrFreqs !== 'object') fl2.arrFreqs = {};
-    fl2.arrFreqs[arrCity] = freqData;
-    if (state.flights) state.flights[state.flightIdx] = fl2; else state.flight = fl2;
-    saveState();
-  }
-  function persistFreqFontSize(sz) {
-    const fl2 = state.flights ? (state.flights[state.flightIdx] || {}) : (state.flight || {});
-    fl2.apprFreqFontSize = sz;
-    if (state.flights) state.flights[state.flightIdx] = fl2; else state.flight = fl2;
-    saveState();
-  }
-
-  const allFreqInputs = [];
-  function buildFreqColumn(label, rows) {
-    const colWrap = document.createElement('div');
-    colWrap.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:6px';
-    const colTitle = document.createElement('div');
-    colTitle.style.cssText = 'font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px';
-    colTitle.textContent = label;
-    colWrap.appendChild(colTitle);
-
-    const rowsWrap = document.createElement('div');
-    rowsWrap.style.cssText = 'display:flex;flex-direction:column;gap:4px';
-    colWrap.appendChild(rowsWrap);
-
-    function renderFreqRows() {
-      rowsWrap.innerHTML = '';
-      allFreqInputs.length = 0;
-      rows.forEach((row, idx) => {
-        const r = document.createElement('div');
-        r.style.cssText = 'display:flex;gap:4px;align-items:center';
-        const labelInp = document.createElement('input');
-        labelInp.type = 'text'; labelInp.value = row.label || ''; labelInp.placeholder = 'Label';
-        labelInp.style.cssText = 'flex:1;min-width:0;padding:5px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:' + FREQ_SIZES[curFreqSize] + 'px';
-        labelInp.addEventListener('input', e => { row.label = e.target.value; persistFreqs(); });
-        const freqInp = document.createElement('input');
-        freqInp.type = 'text'; freqInp.value = row.freq || ''; freqInp.placeholder = 'Freq'; freqInp.inputMode = 'decimal';
-        freqInp.style.cssText = 'width:76px;flex-shrink:0;padding:5px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:' + FREQ_SIZES[curFreqSize] + 'px;font-family:SF Mono,monospace;text-align:right';
-        freqInp.addEventListener('input', e => { row.freq = e.target.value; persistFreqs(); });
-        const delBtn = document.createElement('button');
-        delBtn.textContent = '✕';
-        delBtn.style.cssText = 'padding:4px 7px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);color:var(--text3);font-size:11px;cursor:pointer;flex-shrink:0';
-        delBtn.addEventListener('click', () => { rows.splice(idx, 1); persistFreqs(); renderFreqRows(); });
-        r.appendChild(labelInp); r.appendChild(freqInp); r.appendChild(delBtn);
-        rowsWrap.appendChild(r);
-        allFreqInputs.push(labelInp, freqInp);
-      });
-    }
-    renderFreqRows();
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = '+ Add';
-    addBtn.style.cssText = 'padding:6px;border-radius:6px;border:1px dashed var(--border2);background:transparent;color:var(--text3);font-size:11px;font-weight:600;cursor:pointer;margin-top:2px';
-    addBtn.addEventListener('click', () => { rows.push({ label: '', freq: '' }); persistFreqs(); renderFreqRows(); });
-    colWrap.appendChild(addBtn);
-
-    return colWrap;
-  }
-
-  freqCols.appendChild(buildFreqColumn('North Arrival', freqData.north));
-  freqCols.appendChild(buildFreqColumn('South Arrival', freqData.south));
-
-  function applyFreqSize(sz) {
-    curFreqSize = sz;
-    allFreqInputs.forEach(inp => { inp.style.fontSize = FREQ_SIZES[sz] + 'px'; });
-  }
-  minusBtn.addEventListener('click', () => {
-    const i = FREQ_SIZE_ORDER.indexOf(curFreqSize);
-    if (i > 0) { applyFreqSize(FREQ_SIZE_ORDER[i - 1]); persistFreqFontSize(FREQ_SIZE_ORDER[i - 1]); }
-  });
-  plusBtn.addEventListener('click', () => {
-    const i = FREQ_SIZE_ORDER.indexOf(curFreqSize);
-    if (i < FREQ_SIZE_ORDER.length - 1) { applyFreqSize(FREQ_SIZE_ORDER[i + 1]); persistFreqFontSize(FREQ_SIZE_ORDER[i + 1]); }
-  });
-
-  body.appendChild(freqWrap);
-  }
-  p.appendChild(body); document.body.appendChild(p);
-}
 
 function showArrivalNotes() {
   if (document.getElementById('arr-notes-pop')) { document.getElementById('arr-notes-pop').remove(); return; }
