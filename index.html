@@ -14,6 +14,11 @@ if (location.pathname.indexOf('/FlightBeta') === 0) {
   document.title = 'Flight Plan (Beta)';
   var _amt = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (_amt) _amt.setAttribute('content', 'Flight Beta');
+  // .113 trial, beta only: drop maximum-scale/user-scalable so iOS allows pinch
+  // zoom. Done here, while the head is still parsing, so it applies before the
+  // first layout. Live Flight keeps pinch disabled.
+  var _vp = document.querySelector('meta[name="viewport"]');
+  if (_vp) _vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 </script>
 <style>
@@ -163,7 +168,10 @@ html,body{height:100%;height:100dvh;margin:0;padding:0;background:var(--bg);colo
 /* ── Section label ── */
 .section-label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin:14px 0 6px}
 .help-on .has-help{border-bottom:1px dotted var(--blue);cursor:help}
-.help-badge{display:none;align-items:center;justify-content:center;width:19px;height:19px;margin-left:5px;border-radius:50%;border:1px solid var(--blue);background:var(--blue-ll);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;vertical-align:middle;flex-shrink:0;line-height:1}
+.help-badge{display:none;position:relative;align-items:center;justify-content:center;width:27px;height:27px;margin-left:9px;border-radius:50%;border:1.5px solid var(--blue);background:var(--blue-ll);color:var(--blue);font-size:15px;font-weight:800;cursor:pointer;vertical-align:middle;flex-shrink:0;line-height:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+/* Hit area out to ~45px without covering the button on its left (.110). */
+.help-badge::before{content:'';position:absolute;top:-9px;bottom:-9px;left:-4px;right:-9px}
+.help-badge:active{background:var(--blue);color:#fff}
 .help-on .help-badge{display:inline-flex}
 
 /* ── Macro bar ── */
@@ -549,11 +557,11 @@ function freqBlockHtml(page, title, fields, inline) {
 }
 
 // -- Protocol sync --
-const APP_BUILD = '2026-11-21.109' + (IS_BETA ? '-beta' : '');
+const APP_BUILD = '2026-11-21.113' + (IS_BETA ? '-beta' : '');
 // Shown by the i button on the update banner. The banner fetches these notes
 // out of the INCOMING index.html, so they always describe the build you are
 // about to load. Keep it short, plain, and free of apostrophes (.108).
-const BUILD_NOTES = 'The flight number now sits centred in the top banner, in the largest size that fits. It has been taken out of the nav bar at the bottom of all four pages.\n\nLight/Dark and Phone/iPad have moved off the top bar into the gear menu, beside Help and Simplified. Each button there shows the state you are in now.\n\nThe gear menu is also where Help lives: dotted underlines and ? badges on anything with a card.\n\nFixes the version label on the beta build, which stopped saying -beta in .108.\n\nNo computed number changed this build.';
+const BUILD_NOTES = 'Two ways to get the text bigger, so you can judge which one works.\n\nThe gear menu has a new Text row: tap it to cycle 100, 115 and 130 per cent. It scales the page content only. The header and the tab bar stay where they are, and pop-up cards and cheat sheets are not scaled in this build.\n\nThe beta build also allows pinch to zoom, which this one does not. Pinch magnifies the whole screen rather than reflowing anything, so watch what it does to the header and to full-screen cards.';
 const PROTOCOL_SYNC_URL = 'https://protocol-sync.coochiesan.workers.dev';
 // Private CORS proxy (Cloudflare Worker, build .90). corsproxy.io began
 // answering HTTP 401 to unauthenticated requests (17 Oct 2026), which took
@@ -806,6 +814,34 @@ function setUiPref(k, v) {
   try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
   if (typeof render === 'function') render();
 }
+// ── Content zoom (.113) ───────────────────────────────────────────────────
+// The shell is deliberately fixed height: #app is pinned to the four viewport
+// edges with #header and #nav as flex-shrink:0 and #content as the only
+// scrolling slot. Zooming #app, body or #content itself scales the slot and
+// pushes the nav bar off screen, which would leave the gear menu unreachable.
+// So the zoom goes on #content's CHILDREN, inside the scroller, with their
+// width divided back down so the scaled result still measures one screen wide
+// and nothing scrolls sideways.
+const ZOOM_STEPS = [100, 115, 130];
+function contentZoom() {
+  const z = parseInt(uiPrefs().zoom, 10);
+  return ZOOM_STEPS.indexOf(z) >= 0 ? z : 100;
+}
+function applyContentZoom() {
+  const c = document.getElementById('content'); if (!c) return;
+  const z = contentZoom();
+  const zv = z === 100 ? '' : String(z / 100);
+  const wv = z === 100 ? '' : (10000 / z).toFixed(4) + '%';
+  for (let i = 0; i < c.children.length; i++) {
+    const el = c.children[i];
+    el.style.zoom = zv;
+    el.style.width = wv;
+  }
+}
+function cycleContentZoom() {
+  const i = ZOOM_STEPS.indexOf(contentZoom());
+  setUiPref('zoom', ZOOM_STEPS[(i + 1) % ZOOM_STEPS.length]);
+}
 // The label's own text, without any trailing span the app appends for
 // context (type tag, city, scenario) and without a ' \u00b7 ' suffix.
 function helpLabelText(el) {
@@ -1012,6 +1048,7 @@ function uiApply() {
         badge.className = 'help-badge';
         badge.dataset.help = k;
         badge.textContent = '?';
+        badge.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); showHelpCard(k); });
         el.insertAdjacentElement('afterend', badge);
         buttons++;
       });
@@ -1024,6 +1061,7 @@ function uiApply() {
         badge.className = 'help-badge';
         badge.dataset.help = k;
         badge.textContent = '?';
+        badge.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); showHelpCard(k); });
         btn.insertAdjacentElement('afterend', badge);
         buttons++;
       });
@@ -1118,6 +1156,8 @@ function showSetupMenu() {
     document.body.classList.contains('light'), 'Light', 'Dark', () => toggleTheme()));
   pop.appendChild(rowAct('Layout', 'Phone replaces the tabs with one large-text summary card.',
     !!state.phoneMode, 'Phone', 'iPad', () => togglePhoneMode()));
+  pop.appendChild(rowAct('Text', 'Scales the page content. The header and tab bar stay put; pop-up cards and cheat sheets are not scaled yet.',
+    true, contentZoom() + '%', contentZoom() + '%', () => cycleContentZoom()));
   const cov = document.createElement('div');
   cov.style.cssText = 'font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;line-height:1.5';
   cov.textContent = 'This page: ' + UI_COVERAGE.labels + ' labels and ' + UI_COVERAGE.buttons + ' buttons with cards, ' + UI_COVERAGE.gaps + ' labels without. ' + Object.keys(HELP_CARDS).length + ' cards written.';
@@ -1153,6 +1193,7 @@ function render() {
   setTimeout(() => { if (typeof updateAtisAges === 'function') updateAtisAges(); }, 0);   // ATIS age badges (.91)
   { const hf = document.getElementById('hdr-flight');   // centred flight title (.109)
     if (hf) { const f = currentFlight(); hf.textContent = (f && f.flightNum) ? 'American ' + f.flightNum : 'American \u2014'; } }
+  applyContentZoom();   // text size (.113)
   uiApply();   // help markers + simplified fields (.106)
 }
 
@@ -6437,9 +6478,13 @@ function renderRedispatch(c) {
       <div class="tz-time" style="color:var(--amber)">${rdTimeToRD}</div>
       <div class="tz-body">${rdDistToRD} nm</div>
     </div>
-    <div class="tz-block" style="margin-left:1px">
+    <div class="tz-block" style="margin-left:1px;padding:4px 6px">
       <div class="tz-label">Arrival · ${arrCity}</div>
-      <div class="tz-time" style="color:var(--green)">${arrLocalDisp}</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:5px">
+        <button onclick="adjustArrTime(-1)" style="padding:1px 7px;border-radius:4px;border:1px solid var(--green);background:var(--green-l);color:var(--green);font-size:14px;font-weight:700;cursor:pointer;line-height:1.4">−</button>
+        <div class="tz-time" style="color:var(--green);margin:0">${arrLocalDisp}</div>
+        <button onclick="adjustArrTime(1)" style="padding:1px 7px;border-radius:4px;border:1px solid var(--green);background:var(--green-l);color:var(--green);font-size:14px;font-weight:700;cursor:pointer;line-height:1.4">+</button>
+      </div>
       <div class="tz-body">${arrDayLabel}${arrDayLabel?' · ':''}${arrUTCDisp} UTC</div>
     </div>
   </div>`;
@@ -8044,9 +8089,13 @@ function renderArrival(c) {
            <div class="tz-body">${DAYS[localNow.getDay()]} · ${minToHHMM(toUTC(localNow.getHours()*60+localNow.getMinutes(), depOff))} UTC</div>`
       }
     </div>
-    <div class="tz-block" style="margin-left:1px;border-left:2px solid var(--green);border-right:2px solid var(--green)">
+    <div class="tz-block" style="margin-left:1px;border-left:2px solid var(--green);border-right:2px solid var(--green);padding:4px 6px">
       <div class="tz-label">Arrival · ${arrCity}</div>
-      <div class="tz-time" style="color:var(--green)">${arrLocalDisp}</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:5px">
+        <button onclick="adjustArrTime(-1)" style="padding:1px 7px;border-radius:4px;border:1px solid var(--green);background:var(--green-l);color:var(--green);font-size:14px;font-weight:700;cursor:pointer;line-height:1.4">−</button>
+        <div class="tz-time" style="color:var(--green);margin:0">${arrLocalDisp}</div>
+        <button onclick="adjustArrTime(1)" style="padding:1px 7px;border-radius:4px;border:1px solid var(--green);background:var(--green-l);color:var(--green);font-size:14px;font-weight:700;cursor:pointer;line-height:1.4">+</button>
+      </div>
       <div class="tz-body">${arrDayLabel}${arrDayLabel?' · ':''}${arrUTCDisp} UTC</div>
     </div>
     <div class="tz-block" style="margin-left:1px">
@@ -8762,6 +8811,11 @@ function updateDepInTimer() {
     const depLocalMs = new Date(fl.depDate + 'T00:00:00Z').getTime() + dh*3600000 + dm*60000;
     const depMs = depLocalMs - depOffMin * 60000;  // UTC epoch
     const diff = depMs - Date.now();
+    if (diff < -86400000) {                      // .111 - auto-stop 24 h after departure
+      el.textContent = '\u2014h \u2014\u2014m';
+      el.style.color = 'var(--red)';             // .112 - keep the colour cue; past departure is always red
+      return;
+    }
     const abs = Math.abs(diff);
     const past = diff < 0;
     const h = Math.floor(abs / 3600000);
@@ -8774,9 +8828,12 @@ function updateDepInTimer() {
 
 
 // ── Takeoff timer ──────────────────────────────────────────────────────────
+const ET_DASH = '\u2014:\u2014\u2014:\u2014\u2014';
 function elapsedStr(takeoffTime) {
   const secs = Math.floor((Date.now() - takeoffTime) / 1000);
+  if (!isFinite(secs)) return ET_DASH;          // .111 - no takeoff time logged
   if (secs < 0) return '0:00:00';
+  if (secs >= 86400) return ET_DASH;            // .111 - auto-stop after 24 h
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
@@ -8847,9 +8904,9 @@ function adjustTakeoff(dMin) {
 
 function updateElapsedDisplay() {
   const fl = currentFlight ? currentFlight() : (state.flight || {});
-  if (!fl || !fl.takeoffTime) return;
   const el = document.getElementById('elapsed-display');
-  if (el) el.textContent = elapsedStr(fl.takeoffTime);
+  if (!el) return;
+  el.textContent = (fl && fl.takeoffTime) ? elapsedStr(fl.takeoffTime) : ET_DASH;   // .111
 }
 
 function updateFlightRemaining() {

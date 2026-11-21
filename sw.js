@@ -10,7 +10,7 @@
 const SCOPE = new URL('./', self.location.href).href;
 const CACHE_PREFIX = /\/FlightBeta\//.test(SCOPE) ? 'flightbeta-assets-' : 'flight-assets-';
 const SHELL_INDEX = SCOPE + 'index.html';
-const CACHE_NAME = CACHE_PREFIX + 'v2026-11-21.109';
+const CACHE_NAME = CACHE_PREFIX + 'v2026-11-21.113';
 const NETWORK_TIMEOUT_MS = 4000;
 
 // App shell — required for the app to load offline / on restricted networks
