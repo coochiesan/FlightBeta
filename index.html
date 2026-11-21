@@ -157,6 +157,9 @@ html,body{height:100%;height:100dvh;margin:0;padding:0;background:var(--bg);colo
 
 /* ── Section label ── */
 .section-label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin:14px 0 6px}
+.help-on .has-help{border-bottom:1px dotted var(--blue);cursor:help}
+.help-badge{display:none;align-items:center;justify-content:center;width:19px;height:19px;margin-left:5px;border-radius:50%;border:1px solid var(--blue);background:var(--blue-ll);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;vertical-align:middle;flex-shrink:0;line-height:1}
+.help-on .help-badge{display:inline-flex}
 
 /* ── Macro bar ── */
 .macro-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
@@ -214,6 +217,11 @@ function showUpdateBanner() {
   b.id = 'update-banner';
   b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#1e7f3c;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:sans-serif;font-size:15px;font-weight:700;box-shadow:0 -2px 12px rgba(0,0,0,0.4)';
   b.innerHTML = '<span>New version available</span>';
+  const info = document.createElement('button');   // what changed (.108)
+  info.textContent = 'i';
+  info.style.cssText = 'width:30px;height:30px;flex-shrink:0;margin-left:auto;border-radius:50%;border:2px solid #fff;background:transparent;color:#fff;font-size:15px;font-weight:800;font-style:italic;cursor:pointer';
+  info.addEventListener('click', () => { if (typeof showUpdateNotes === 'function') showUpdateNotes(); });
+  b.appendChild(info);
   const btn = document.createElement('button');
   btn.textContent = 'Reload now';
   btn.style.cssText = 'padding:8px 16px;border-radius:8px;border:none;background:#fff;color:#1e7f3c;font-size:15px;font-weight:800;cursor:pointer';
@@ -239,6 +247,7 @@ function showUpdateBanner() {
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="theme-toggle" onclick="toggleTheme()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">Light</button>
+      <button id="help-gear-btn" onclick="showSetupMenu()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">⚙</button>
       <button id="phone-mode-btn" onclick="togglePhoneMode()" style="background:var(--surf2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap">Phone</button>
       <div class="hdr-time">
         <div id="clock-local" style="font-size:18px;font-weight:700;font-family:'SF Mono',monospace"></div>
@@ -536,7 +545,11 @@ function freqBlockHtml(page, title, fields, inline) {
 }
 
 // -- Protocol sync --
-const APP_BUILD = '2026-11-16.105' + (IS_BETA ? '-beta' : '');
+const APP_BUILD = '2026-11-21.108'
+// Shown by the i button on the update banner. The banner fetches these notes
+// out of the INCOMING index.html, so they always describe the build you are
+// about to load. Keep it short, plain, and free of apostrophes (.108).
+const BUILD_NOTES = 'Assisted mode: gear menu in the top bar with Help and Simplified switches. Help puts dotted underlines and ? badges on anything with a card - tap one to read it. Simplified hides advanced fields.\n\n107 help cards across every page.\n\nO/W and E/O landing distances compute from the AOM and QRH tables for an immediate return. Check them against the Land App before landing.\n\nATOW is the assumed takeoff weight: typing it now sets PTOW to ATOW minus 3,000 lb, and typing PTOW sets ATOW back. The old version had this backwards.\n\nCrossing ALT you typed is no longer overwritten when a plan loads.\n\nClimb Ltd boxes removed - a hand-set Yes/No told you nothing. Coming back if the approach climb limit chart turns up.\n\nArrival Temp / DP boxes squared up with a slash to match the label.' + (IS_BETA ? '-beta' : '');
 const PROTOCOL_SYNC_URL = 'https://protocol-sync.coochiesan.workers.dev';
 // Private CORS proxy (Cloudflare Worker, build .90). corsproxy.io began
 // answering HTTP 401 to unauthenticated requests (17 Oct 2026), which took
@@ -777,6 +790,322 @@ function renderPhoneMode(c) {
   }
 }
 
+// ── Assisted mode: help cards + simplified layout (.106) ────────────────────
+// Device-level, not per flight: kept in its own localStorage key so Share and
+// the flight state never carry it between iPads.
+const UI_PREFS_KEY = 'flight_ui_prefs';
+function uiPrefs() {
+  try { return JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function setUiPref(k, v) {
+  const p = uiPrefs(); p[k] = v;
+  try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
+  if (typeof render === 'function') render();
+}
+// The label's own text, without any trailing span the app appends for
+// context (type tag, city, scenario) and without a ' \u00b7 ' suffix.
+function helpLabelText(el) {
+  const first = el.childNodes && el.childNodes[0];
+  let t = (first && first.nodeType === 3 && String(first.nodeValue).trim()) ? first.nodeValue : el.textContent;
+  return String(t).split('\u00b7')[0];
+}
+// Normalised lookup key: lower case, punctuation and icons stripped.
+function helpKey(s) {
+  return String(s == null ? '' : s).toLowerCase()
+    .replace(/[^a-z0-9/+#&\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Cards. Keys are helpKey() of the on-screen label; buttons are prefixed
+// 'btn:'. A target with no entry gets no underline and no badge, so gaps are
+// invisible to the user — add an entry here and it appears, no other edits.
+// Text is Chad's own, from the card doc edit pass (.108).
+const HELP_CARDS = {
+  // ── Preflight · flight info, route, fuel ────────────────────────
+  "flight no": ["Flight Number", "Filled from the release. Feeds the flight header, the PAs and the saved-flight list."],
+  "gate": ["Gate", "Preflight: the departure gate from the release. Arrival: the destination gate, which often changes in flight \u2014 keep it current, the Descent PA reads it."],
+  "a/c type": ["Aircraft Type", "Sets far more than the label: EPR vs N1, the structural weight limits, the tailwind limit (10 kt on the -200ER, 15 on the -300ER) and which landing-distance chart is used. Check it before trusting any computed number."],
+  "acft nose #": ["Nose Number", "The aircraft you are actually flying. The information button beside it shows the N-number and the in-service date."],
+  "enroute time": ["Enroute Time", "Planned time from the release. Drives the arrival estimate, the flight-remaining countdown and the break calculator."],
+  "dispatch desk": ["Dispatch Desk", "The desk that built this release. The information button beside it shows the desk phone number."],
+  "souls": ["Souls On Board", "Total people on the aircraft. ATC and ARFF will ask for this in an emergency \u2014 update it after the final count is received. Prefill it in the ATC>Emergency field."],
+  "total dist": ["Total Distance", "Flight-plan distance. The Gate PA quotes it in both miles and kilometers."],
+  "crossing alt": ["Crossing Altitude", "Oceanic entry level for the crossing. Prefilled when the plan loads, from the first ORV waypoint\u2019s flight level in the legs table \u2014 so it is blank on a route with no ORV section, or if the legs scrape missed that waypoint. A level you type is kept and never overwritten by a later plan load."],
+  "dep": ["Departure", "Departure airport. An amber globe means the time zone is unknown \u2014 tap it to look the airport up so clocks and countdowns are right."],
+  "arr": ["Arrival", "Destination airport. It also sets the layover city and the transition altitude prefill on the Arrival page."],
+  "alternate": ["Alternate", "Filed alternate from the release."],
+  "block": ["Block Fuel", "Planned block fuel from the release."],
+  "min takeoff": ["Minimum Takeoff Fuel", "The least fuel you can legally depart with. The Takeoff Brief reads it out so it can be compared against actual fuel on board."],
+  "min redispatch fuel": ["Minimum Redispatch Fuel", "Fuel required at the redispatch point. Only appears on redispatch releases and manually built flights."],
+  "pln arr fuel": ["Planned Arrival Fuel", "Fuel the release expects at the destination."],
+  "arr fuel hrs+mins": ["Arrival Fuel as Endurance", "The same planned arrival fuel expressed as time remaining \u2014 easier to reason about when holding or diverting."],
+  // ── Preflight · weather ─────────────────────────────────────────
+  "atis text": ["ATIS Text Box", "Paste the raw ATIS here and the app scrapes the letter, temperature, altimeter and wind out of it. In FD Pro the ATIS is one-touch copy \u2014 copy it there, tap this box and paste, which beats Fetch at a field with no digital ATIS. The age badge times from the paste."],
+  "atis": ["ATIS Letter", "The current information letter. Fetch fills it; the age badge beside the box turns amber past 60 minutes and red past 2 hours."],
+  "rwy": ["Runway", "The runway in use. Selecting it pulls that runway\u2019s takeoff data, drives the crosswind and headwind/tailwind calculation, and sets the wind correction used in the landing distances."],
+  "runway": ["Runway Selector", "Every runway the release planned takeoff data for. Picking one loads its flaps, thrust, V-speeds, assumed temperature and limit weight. Add Runway allows entry by hand."],
+  "temp c / f": ["Outside Air Temperature", "OAT from the ATIS, with the Fahrenheit equivalent beside it. The Takeoff Brief compares it against the assumed temperature, and the landing distances correct for anything above ISA."],
+  "qnh": ["Altimeter Setting", "QNH from the ATIS or METAR."],
+  "wind dir": ["Wind Direction", "Reported wind direction. Used with the speed and the selected runway to work out crosswind and headwind/tailwind."],
+  "dir": ["Runway Designator", "The L, R or C beside the runway number. RWY and Dir together set the runway (25 + R = 25R). The pair only appears on a manually built flight: once a plan supplies the runway table, the Performance runway dropdown is the only runway control and these two are hidden."],
+  "kts": ["Wind Speed", "Steady wind speed in knots."],
+  "gust": ["Gust", "Gust value when one is reported. Shown for awareness; the computed landing distances use the steady wind."],
+  "x-wind": ["Crosswind Component", "Calculated for the selected runway from the reported wind. Turns red past the limit."],
+  "headwind": ["Headwind Component", "Along-runway component for the selected runway. A tailwind is shown instead when the wind is behind you, and turns red past the limit."],
+  "tailwind": ["Tailwind Component", "Along-runway component when the wind is behind you. Red past the limit \u2014 10 kt on the -200ER, 15 kt on the -300ER, manual or autoland."],
+  // ── Preflight · performance ─────────────────────────────────────
+  "thrust": ["Thrust Rating", "Takeoff thrust from the release: TO, TO-1 or TO-2."],
+  "dry/wet": ["Runway Condition", "The condition the takeoff data assumes. It also picks the landing-distance column: DRY reads the chart\u2019s Dry column, WET reads Good. Toggle to change."],
+  "flaps": ["Takeoff Flaps", "Flap setting from the takeoff data for the selected runway."],
+  "a/c pack": ["Air Conditioning Packs", "Pack configuration the takeoff performance assumes. Change it and the numbers from the release no longer apply. Toggle to change."],
+  "epr": ["Target EPR", "Takeoff thrust setting from the TPS data for this runway, flap and temperature."],
+  "n1": ["Target N1", "Takeoff thrust setting from the TPS data for this runway, flap and temperature (the -300ER sets N1 rather than EPR)."],
+  "o/w landing": ["Overweight Landing Distance", "Computed for an immediate return at PTOW: AOM Flaps 25, max manual braking, corrected for tailwind and temperature. Planning figure only \u2014 if you actually come back, run it in the Land App. Type over it to override; clear the box to return to computed."],
+  "e/o landing": ["Single-Engine Landing Distance", "Computed for an immediate return at PTOW: QRH engine-shutdown Flaps 20 with one reverser and the 15% margin, plus a 5 kt Vapp increment, corrected for tailwind and temperature. Planning figure only \u2014 verify in the Land App before landing."],
+  "tps variations": ["TPS Variations", "Takeoff performance variations from the AOM. The adjustments that are applied when conditions differ from the planned data."],
+  // ── Preflight · weights and temperatures ────────────────────────
+  "mtow": ["Max Takeoff Weight", "Limiting takeoff weight from the release, with its limit code beside it."],
+  "limit": ["Limit Code", "Which limit is producing the MTOW on this release \u2014 structural, field, climb or obstacle."],
+  "ptow": ["Planned Takeoff Weight", "Weight the release planned on. The landing-distance calculator works from this, and a PTOW within 2,000 lb of structural MTOW raises a warning banner."],
+  "atow": ["Assumed Takeoff Weight", "The weight the takeoff data was computed at: always PTOW + 3,000 lb. On a reduced-thrust takeoff it is the ceiling the numbers are good to \u2014 Displayed Aircraft Weight above ATOW means a new TPS. Warns the same way as PTOW against structural MTOW."],
+  "disp wt": ["Displayed Aircraft Weight", "Entered by hand from the aircraft computed T/O weight, which is why it stays red until filled. Over max taxi weight it raises a full DO NOT RELEASE PARKING BRAKE warning."],
+  "overweight warning": ["Over Max Taxi Weight", "The weight in DISP WT is above max taxi weight for the type, so the aircraft cannot legally move \u2014 do not release the parking brake. Get a corrected weight from the closeout, or weight comes off. Acknowledge silences the warning for that exact weight; a different over-limit value raises it again, and the banner and red field stay until the weight is back under the limit."],
+  "assumed temp": ["Assumed Temperature", "The reduced-thrust assumed temperature, or MAX-WT for full rated thrust."],
+  "planned temp": ["Planned Temperature", "Temperature the release planned on, for comparison against the actual OAT in the brief."],
+  "actual temp": ["Actual Temperature", "Current OAT. The Takeoff Brief calls out whether it is above or below the planned or assumed temperature."],
+  // ── Preflight · altitudes ───────────────────────────────────────
+  "trans alt": ["Transition Altitude", "Prefilled from the airport where the value is standard (18,000 in the US and southern Canada, 6,000 at Heathrow, and so on). A value you type is never overwritten \u2014 Compare and enter it from the chart when the box is different or blank."],
+  "nadp": ["Noise Abatement Departure Procedure", "Which NADP the departure uses. The buttons fill the engine-out, acceleration and thrust-reduction heights to match."],
+  "eo accel": ["Engine-Out Acceleration Height", "Height above field elevation at which you accelerate and clean up with an engine failure."],
+  "eo msl": ["Engine-Out Acceleration Altitude, MSL", "The same acceleration point as an altitude above sea level, scraped from the Airport Analysis Data. The Flight Brief reads both: the AFE height and this MSL altitude."],
+  "accel ht": ["Acceleration Height", "Normal (all-engine) acceleration height above field elevation, for the selected noise procedure \u2014 1,500 under NADP 1, 1,000 under NADP 2."],
+  "thr red": ["Thrust Reduction Height", "Height above field elevation at which takeoff thrust is reduced to climb thrust \u2014 3,000 under NADP 1, 1,000 under NADP 2."],
+  // ── Arrival ─────────────────────────────────────────────────────
+  "temp / dp": ["Temperature and Dew Point", "From the arrival ATIS or METAR. The spread matters for fog and for contamination on a cold airframe."],
+  "rcc": ["Runway Condition Code", "A column of the Wind and X-Wind Limits table, not a box to fill in. Read across from the code the field reports \u2014 6 dry down to 1 poor \u2014 to the braking action and surface beside it, and the crosswind limit for that condition."],
+  "pirep / surface": ["Braking Action and Surface", "The middle column of the Wind and X-Wind Limits table: the braking action term that goes with each condition code, with the surface type under it. Reference only \u2014 nothing in this table is entered."],
+  "ldg dist ft": ["Landing Distance", "Manual entry. The Standard Landing Assessment below covers almost every arrival; anything outside it should be computed in the Land App so the approved figure is the one on record."],
+  "ldg wt": ["Landing Weight", "Prefills as Displayed Aircraft Weight minus planned burn. The minus and plus buttons step it by 1,000 lb; clearing the box returns it to the prefill. It turns red over max landing weight."],
+  "max ldg wt": ["Max Landing Weight", "Defaults to the structural limit for the type. Overwrite it when a performance limit is lower."],
+  // ── Flight ──────────────────────────────────────────────────────
+  "lat / long": ["Lat / Long Formats", "The oceanic position formats side by side: voice, FMS entry, displayed and flight plan. Half-degree points are the trap \u2014 N51.30.0W050.00.0 displays as 5250N. Expand and verify each waypoint in the LEGS check, not the route page."],
+  "body clock context": ["Body Clock Context", "Departure and arrival shown in local time, UTC and your home body clock, so you can see where the flight sits in your own day."],
+  "flight remaining": ["Flight Remaining", "Live countdown to the current arrival estimate. Adjustable on the Flight tab."],
+  "timers": ["Break Timers", "Live countdown to the end of each break. Set Alarm hands the times to iOS Shortcuts."],
+  // ── Layover ─────────────────────────────────────────────────────
+  "home base": ["Home Base", "Your home time zone. Every body-clock time and the whole layover plan is anchored to it \u2014 the plan deliberately does not adapt to local time."],
+  "city": ["Layover City", "Synced from the arrival airport. Use Other for a city not in the list; its time zone is looked up and saved."],
+  "icao/iata": ["Airport Code", "Code for a city not already in the list. The app looks up its time zone so the layover plan and clocks are right."],
+  "tz / offset": ["Time Zone and Offset", "The resolved zone and its current offset, on real daylight-saving rules rather than a fixed table."],
+  "check-in": ["Check-in Time", "Report time for the next duty. The sleep plan is built backward from it."],
+  "pickup": ["Van Pickup", "Pickup time at the hotel, used as the end point of the layover timeline."],
+  "on arrival": ["On Arrival Choice", "Stay Awake pushes through towards local bedtime, Nap takes a controlled nap first, Go to Sleep goes straight down. The timeline rebuilds for whichever you pick."],
+  "circadian analysis": ["Circadian Analysis", "Explains why the plan places sleep where it does, once check-in and pickup are entered."],
+  "timeline": ["Layover Timeline", "The plan across the layover: caffeine cutoff, wind-down, sleep placed against your home body clock\u2019s low point, wake and morning light. Each marker can be handed to an iOS alarm."],
+  // ── CDI and passport ────────────────────────────────────────────
+  "my employee number": ["My Employee Number", "Your own number, kept on this iPad. It is what lets the app recognize you in the CDI, exclude you from crew counts and track which pilots you have flown with before."],
+  // ── Buttons ─────────────────────────────────────────────────────
+  "btn:load flight plan": ["Load Flight Plan", "Choose the release PDF from Files, or paste the text, then Parse & Fill Fields. It fills V-speeds, thrust, weights, fuel, route, legs, frequencies, field reports and transition altitudes in one pass. Loading a new plan replaces the previous flight\u2019s scraped values."],
+  "btn:load cdi": ["Load CDI", "Paste the crew departure information. It builds the crew list with seats, names and employee numbers, and fills the number one flight attendant box."],
+  "btn:view cdi": ["View CDI", "The full crew list. Tap an employee number to copy it, or tap a crew member to add private notes and see previous flights you have flown together."],
+  "btn:this is me": ["This Is Me", "Marks your own row so the app never counts flights flown with yourself. It matches on employee number, so fill in My Employee Number in the My Passport card \u2014 without it, crew identification and the previous-flights-together count cannot work."],
+  "btn:share": ["Share Flight", "Packages this flight so it can be imported on another iOS device \u2014 clipboard first, AirDrop as a backup. The receiving device asks before importing."],
+  "btn:protocol": ["Push to Protocol", "Sends this flight and your breaks to the companion Protocol health app. The first push on a device asks for the PIN and keeps it on that iPad."],
+  "btn:fetch": ["Fetch Weather", "Tries FAA digital ATIS first (US only), then ATIS.guru, then the METAR. If all three fail the box lists what it tried and why. Heathrow has no digital ATIS at all \u2014 expect to type it from the recording."],
+  "btn:clear": ["Clear Weather", "Empties the letter, temperature, altimeter, wind and text, and puts the cursor in the box ready for a fresh paste."],
+  "btn:takeoff brief": ["Takeoff Brief", "The spoken brief in order: weights against limits, margin to the assumed takeoff weight, winds, temperature against assumed, thrust and flaps, noise procedure and minimum takeoff fuel. Amber prompts mark anything needing review. Red prompts mark anything not yet entered or out of limits."],
+  "btn:flight brief": ["Flight Brief", "Departure briefing prompts with this flight\u2019s live numbers: taxi, departure procedure, noise abatement, engine-out acceleration altitude and the stopping distances."],
+  "btn:legs page": ["Legs Page", "Full-screen waypoint table \u2014 ident, latitude and longitude, level, distance, time and fuel \u2014 for cross-checking the box against the plan."],
+  "btn:reference guide": ["Reference Guide", "The Europe or Pacific operations reference pages for this route. Cached on the first online launch, so they open with no connection."],
+  "btn:dep notes": ["Departure Notes", "Your own notes for this departure city. Saved by city, not by flight, so they come back every time you fly out of here."],
+  "btn:gate pa": ["Gate PA", "Welcome-aboard announcement with this flight\u2019s times, distance, route and weather already filled in. Edit rewrites the wording and keeps it on this iPad for every future flight."],
+  "btn:cruise pa": ["Cruise PA", "Top-of-climb announcement, filled from the plan. Edit to make the wording yours, and then stored on this iPad for future flights."],
+  "btn:descent pa": ["Descent PA", "Top-of-descent announcement with arrival time, destination weather and the arrival gate. Edit to make the wording yours, and then stored on this iPad for future flights."],
+  "btn:approach brief": ["Approach Brief", "Arrival briefing prompts: airport familiarity, arrival routing, approach and minimums, runway condition and braking action, flaps and VREF, and the go-around plan."],
+  "btn:nadp 1": ["NADP 1", "Fills the engine-out, acceleration and thrust-reduction heights with the 800/1500/3000 set."],
+  "btn:nadp 2": ["NADP 2", "Fills the engine-out, acceleration and thrust-reduction heights with the 800/1000/1000 set."],
+  "btn:custom": ["Custom Heights", "Opens the three altitude boxes for values that match neither standard noise procedure."],
+  "btn:+ add runway": ["Add Runway", "Enters a runway and its takeoff data by hand \u2014 for a runway the release did not plan for."],
+  "btn:calculate breaks": ["Calculate Breaks", "Splits the cruise into rest periods. Takeoff and landing are entered in UTC; the scheduled departure converts automatically. Selected breaks can be locked and the rest redistributed around them."],
+  "btn:set alarm": ["Set Alarm (one break)", "On a break in the Timers card: opens a large tile showing that break\u2019s end time in UTC and in departure-city local, 15 minutes early, to read off while you set your phone alarm. It does not set the alarm for you. Dashed and dimmed means the break has no local time yet."],
+  "btn:set alarms": ["Set Alarms (all breaks)", "In the break calculator: writes the calculated end times into the wake and break time fields in one go, then flashes a green confirmation. It fills the app\u2019s own fields \u2014 no phone alarm is set."],
+  "btn:divert": ["Divert Airports", "Divert fields for the current oceanic theatre with B777 authorisation, medical and ETOPS status, runway length and field notes. Confirming a divert takes two taps and then switches to the Arrival page and fetches that field\u2019s ATIS. Can be copied to the clipboard and pasted into the Diverts field on FD Pro."],
+  "btn:select divert fields": ["Select Divert Fields", "Choose which fields count as your active diverts for this crossing, so the copy buttons send only the ones you are actually using."],
+  "btn:copy active to clipboard": ["Copy Active Diverts", "Copies your selected divert fields to the clipboard, formatted for pasting straight into the divert fields in FD Pro."],
+  "btn:copy all diverts to clipboard": ["Copy All Diverts", "Copies every divert field for the theatre to the clipboard, formatted for pasting into FD Pro."],
+  "btn:driftdown": ["Driftdown", "Summary of enroute engine failure, oceanic driftdown and the immediate action steps that go with them."],
+  "btn:crew swap": ["Crew Swap Checklist", "What to brief at a crew change: automation state, altitude, routing and deviations, SLOP, depressurization escape routes, frequencies, the next comm change and anything pending."],
+  "btn:oceanic notes": ["Oceanic Notes", "Your notes for the theatre \u2014 Atlantic, Pacific or Deep South \u2014 saved by theatre rather than by flight."],
+  "btn:paste from clipboard": ["Paste", "Drops whatever is on the clipboard in at the cursor, so notes written elsewhere (Apple Notes, a message) can be pulled straight in."],
+  "btn:copy raw text": ["Copy Raw Text", "Copies the raw text of the loaded flight plan. Used for troubleshooting when a value scraped incorrectly \u2014 it shows exactly what the parser was given."],
+};
+
+// Proposed simplified-mode preset: advanced or rarely used fields, hidden on
+// every page. Nothing required for a legal takeoff or landing is in this list.
+const SIMPLE_HIDE = [
+  'acft nose #', 'souls', 'total dist', 'crossing alt', 'arr fuel hrs+mins',
+  'pln arr fuel', 'min redispatch fuel', 'eo msl', 'accel ht', 'thr red',
+  'limit', 'gust', 'max ldg wt'
+];
+
+function showHelpCard(key) {
+  const card = HELP_CARDS[key];
+  if (!card) return;
+  showInfoCard(card[0], card[1]);
+}
+// The card popup itself, so the update banner and the over-weight warning can
+// raise one without a HELP_CARDS entry (.108).
+function showInfoCard(title, body) {
+  const ex = document.getElementById('help-card-pop'); if (ex) ex.remove();
+  const pop = document.createElement('div'); pop.id = 'help-card-pop';
+  pop.style.cssText = 'position:fixed;top:110px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--surf);border:2px solid var(--blue);border-radius:14px;padding:18px 20px;max-width:420px;width:calc(100% - 40px);box-shadow:0 10px 40px rgba(0,0,0,0.4)';
+  const t = document.createElement('div');
+  t.style.cssText = 'font-size:12px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px';
+  t.textContent = title; pop.appendChild(t);
+  const b = document.createElement('div');
+  b.style.cssText = 'font-size:15px;line-height:1.5;color:var(--text);white-space:pre-wrap;max-height:60vh;overflow-y:auto';
+  b.textContent = body; pop.appendChild(b);
+  const x = document.createElement('button');
+  x.textContent = 'Close';
+  x.style.cssText = 'margin-top:14px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:14px;font-weight:700;cursor:pointer';
+  x.addEventListener('click', () => pop.remove());
+  pop.appendChild(x);
+  document.body.appendChild(pop);
+}
+
+// Post-render pass. Decorates labels and buttons that have a card, and hides
+// the simplified-mode fields. Idempotent: every target it touches is flagged,
+// so running it again is a no-op.
+let _uiApplying = false;
+let UI_COVERAGE = { labels: 0, buttons: 0, gaps: 0 };
+function uiApply() {
+  if (_uiApplying) return;
+  _uiApplying = true;
+  try {
+    const p = uiPrefs(), help = !!p.help, simple = !!p.simple;
+    document.body.classList.toggle('help-on', help);
+    let labels = 0, buttons = 0, gaps = 0;
+    document.querySelectorAll('.fld-lbl, .section-label').forEach(el => {
+      const k = helpKey(helpLabelText(el));
+      if (HELP_CARDS[k]) {
+        labels++;
+        el.dataset.help = k;
+        el.classList.add('has-help');
+      } else { gaps++; }
+      if (simple && SIMPLE_HIDE.indexOf(k) >= 0) {
+        const wrap = el.parentElement;
+        if (wrap) { wrap.style.display = 'none'; wrap.dataset.simpleHidden = '1'; }
+      }
+    });
+    if (help) {
+      // Targets with no label of their own (the ATIS paste boxes) opt in with
+      // data-help-key and get the same badge treatment as a button (.108).
+      document.querySelectorAll('[data-help-key]').forEach(el => {
+        if (el.dataset.helpBadged) return;
+        const k = el.dataset.helpKey;
+        if (!HELP_CARDS[k]) return;
+        el.dataset.helpBadged = '1';
+        const badge = document.createElement('span');
+        badge.className = 'help-badge';
+        badge.dataset.help = k;
+        badge.textContent = '?';
+        el.insertAdjacentElement('afterend', badge);
+        buttons++;
+      });
+      document.querySelectorAll('button').forEach(btn => {
+        if (btn.dataset.helpBadged || btn.id === 'help-gear-btn') return;
+        const k = 'btn:' + helpKey(String(btn.textContent).split('\u00b7')[0]);
+        if (!HELP_CARDS[k]) return;
+        btn.dataset.helpBadged = '1';
+        const badge = document.createElement('span');
+        badge.className = 'help-badge';
+        badge.dataset.help = k;
+        badge.textContent = '?';
+        btn.insertAdjacentElement('afterend', badge);
+        buttons++;
+      });
+    }
+    UI_COVERAGE = { labels: labels, buttons: buttons, gaps: gaps };
+  } catch (e) {} finally { _uiApplying = false; }
+}
+
+// One delegated listener: anything carrying data-help opens its card, and only
+// while help is on. Badges sit beside their button, so the button still works.
+document.addEventListener('click', e => {
+  if (!uiPrefs().help) return;
+  const t = e.target.closest ? e.target.closest('[data-help]') : null;
+  if (!t) return;
+  e.preventDefault(); e.stopPropagation();
+  showHelpCard(t.dataset.help);
+}, true);
+
+// Popups are built outside render(), so watch for them. Guarded against its
+// own mutations by _uiApplying plus the per-element flags above.
+let _uiObsTimer = null;
+function uiStartObserver() {
+  if (!window.MutationObserver || !document.body) return;
+  new MutationObserver(() => {
+    const p = uiPrefs();
+    if (!p.help && !p.simple) return;
+    if (_uiApplying) return;
+    clearTimeout(_uiObsTimer);
+    _uiObsTimer = setTimeout(uiApply, 80);
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+// Reads APP_BUILD and BUILD_NOTES out of the incoming index.html, so the banner
+// describes the build you are about to load rather than the one still running.
+function showUpdateNotes() {
+  const render = (txt) => {
+    const ver = (txt.match(/APP_BUILD\s*=\s*'([^']+)'/) || [])[1];
+    let notes = (txt.match(/BUILD_NOTES\s*=\s*'((?:[^'\\]|\\.)*)'/) || [])[1];
+    if (notes) notes = notes.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+    showInfoCard(ver ? 'What is new in ' + ver : 'What is new',
+      notes || 'This build has no notes. Reload to take the update.');
+  };
+  showInfoCard('Checking', 'Reading the notes from the new version\u2026');
+  fetch('index.html', { cache: 'reload' }).then(r => r.text()).then(render)
+    .catch(() => fetch('index.html').then(r => r.text()).then(render)
+    .catch(() => showInfoCard('What is new',
+      'Could not read the notes for the new version. Reload to take the update.')));
+}
+
+function showSetupMenu() {
+  const ex = document.getElementById('setup-pop'); if (ex) { ex.remove(); return; }
+  const p = uiPrefs();
+  const pop = document.createElement('div'); pop.id = 'setup-pop';
+  pop.style.cssText = 'position:fixed;top:70px;right:16px;z-index:10000;background:var(--surf);border:2px solid var(--blue);border-radius:14px;padding:16px 18px;width:320px;max-width:calc(100% - 32px);box-shadow:0 10px 40px rgba(0,0,0,0.4)';
+  const t = document.createElement('div');
+  t.style.cssText = 'font-size:12px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px';
+  t.textContent = 'Setup'; pop.appendChild(t);
+  const row = (label, sub, key) => {
+    const on = !!uiPrefs()[key];
+    const r = document.createElement('div');
+    r.style.cssText = 'display:flex;align-items:flex-start;gap:12px;margin-bottom:14px';
+    const txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0';
+    const l = document.createElement('div'); l.style.cssText = 'font-size:15px;font-weight:700;color:var(--text)'; l.textContent = label;
+    const s = document.createElement('div'); s.style.cssText = 'font-size:12px;color:var(--text3);line-height:1.4;margin-top:2px'; s.textContent = sub;
+    txt.appendChild(l); txt.appendChild(s);
+    const b = document.createElement('button');
+    b.textContent = on ? 'On' : 'Off';
+    b.style.cssText = 'padding:6px 16px;border-radius:8px;border:1px solid ' + (on ? 'var(--green)' : 'var(--border2)') + ';background:' + (on ? 'var(--green-l)' : 'var(--surf2)') + ';color:' + (on ? 'var(--green)' : 'var(--text3)') + ';font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0';
+    b.addEventListener('click', () => { pop.remove(); setUiPref(key, !uiPrefs()[key]); });
+    r.appendChild(txt); r.appendChild(b);
+    return r;
+  };
+  pop.appendChild(row('Help', 'Dotted underlines and ? badges on anything with a card. Tap one to read it; buttons keep working.', 'help'));
+  pop.appendChild(row('Simplified', 'Hides advanced and rarely used fields on every page. Buttons are untouched.', 'simple'));
+  const cov = document.createElement('div');
+  cov.style.cssText = 'font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;line-height:1.5';
+  cov.textContent = 'This page: ' + UI_COVERAGE.labels + ' labels and ' + UI_COVERAGE.buttons + ' buttons with cards, ' + UI_COVERAGE.gaps + ' labels without. ' + Object.keys(HELP_CARDS).length + ' cards written.';
+  pop.appendChild(cov);
+  const x = document.createElement('button');
+  x.textContent = 'Close';
+  x.style.cssText = 'margin-top:12px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:var(--surf2);color:var(--text2);font-size:14px;font-weight:700;cursor:pointer';
+  x.addEventListener('click', () => pop.remove());
+  pop.appendChild(x);
+  document.body.appendChild(pop);
+}
+
 function render() {
   refreshTimeZones();   // keep every city offset/label on current DST rules (.95)
   const c = document.getElementById('content');
@@ -798,6 +1127,7 @@ function render() {
   }
   else if (tab === 'layover') renderLayover(c);
   setTimeout(() => { if (typeof updateAtisAges === 'function') updateAtisAges(); }, 0);   // ATIS age badges (.91)
+  uiApply();   // help markers + simplified fields (.106)
 }
 
 // Dynamically rebuild the mode-row based on whether the current flight is an R/D plan
@@ -2901,7 +3231,7 @@ function renderPreflight(c) {
   const sec = t => { const d=document.createElement('div'); d.style.cssText=SEC_S; d.textContent=t; inner.appendChild(d); };
   const lbl = (t,flex) => { const d=document.createElement('div'); d.style.cssText='font-size:13px;color:var(--text2);'+(flex?'flex:1':''); d.textContent=t; return d; };
   const addRow = (...els) => { const d=document.createElement('div'); d.style.cssText=RS; els.forEach(e=>d.appendChild(e)); inner.appendChild(d); };
-  const col = (labelTxt, el) => { const d=document.createElement('div'); d.style.cssText='display:flex;flex-direction:column;align-items:flex-end'; const l=document.createElement('div'); l.style.cssText=COL_S; l.textContent=labelTxt; d.appendChild(l); d.appendChild(el); return d; };
+  const col = (labelTxt, el) => { const d=document.createElement('div'); d.style.cssText='display:flex;flex-direction:column;align-items:flex-end'; const l=document.createElement('div'); l.className='fld-lbl'; l.style.cssText=COL_S; l.textContent=labelTxt; d.appendChild(l); d.appendChild(el); return d; };
 
   const inp = (key, w, inputmode) => {
     const el=document.createElement('input'); el.type='text'; el.inputMode=inputmode||'text';
@@ -2960,7 +3290,14 @@ function renderPreflight(c) {
       const msg_div = document.createElement('div'); msg_div.style.cssText='font-size:20px;font-weight:800;color:var(--red);margin-bottom:14px;line-height:1.35'; msg_div.textContent=msg;
       const btn = document.createElement('button'); btn.textContent='Acknowledge'; btn.style.cssText='padding:10px 24px;border-radius:8px;border:2px solid var(--red);background:transparent;color:var(--red);font-size:15px;font-weight:700;cursor:pointer';
       btn.addEventListener('click', ()=>{ setFlightQuiet('pbAckWt', String(currentFlight().acWeight || '')); pop.remove(); });
-      pop.appendChild(msg_div); pop.appendChild(btn);
+      const info = document.createElement('button');   // what this warning means (.108)
+      info.textContent = 'i';
+      info.style.cssText = 'width:36px;height:36px;flex-shrink:0;border-radius:50%;border:2px solid var(--red);background:transparent;color:var(--red);font-size:17px;font-weight:800;font-style:italic;cursor:pointer';
+      info.addEventListener('click', ()=>showHelpCard('overweight warning'));
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:10px;align-items:center;justify-content:center';
+      row.appendChild(info); row.appendChild(btn);
+      pop.appendChild(msg_div); pop.appendChild(row);
       document.body.appendChild(pop);
     }
   };
@@ -3163,7 +3500,7 @@ function renderPreflight(c) {
   const inner=document.createElement('div'); inner.style.cssText='padding:6px 10px';
   card.appendChild(inner); c.appendChild(card);
 
-  const ic = (labelTxt, el) => { const d=document.createElement('div'); d.style.cssText='display:flex;flex-direction:column;gap:2px;align-items:flex-start'; const l=document.createElement('div'); l.style.cssText=COL_S; l.textContent=labelTxt; d.appendChild(l); d.appendChild(el); return d; };
+  const ic = (labelTxt, el) => { const d=document.createElement('div'); d.style.cssText='display:flex;flex-direction:column;gap:2px;align-items:flex-start'; const l=document.createElement('div'); l.className='fld-lbl'; l.style.cssText=COL_S; l.textContent=labelTxt; d.appendChild(l); d.appendChild(el); return d; };
   const irow = (...items) => { const d=document.createElement('div'); d.style.cssText='display:flex;align-items:flex-end;gap:4px'; items.forEach(i=>d.appendChild(i)); return d; };
   // ── Flight info + Route + Fuel (4-column grid) ────────────────────────────
   const grid1=document.createElement('div'); grid1.style.cssText='display:grid;grid-template-columns:auto auto auto 1fr;gap:6px 0;padding:5px 0;border-bottom:1px solid var(--border);width:100%';grid1.style.columnGap='0';
@@ -3174,7 +3511,7 @@ function renderPreflight(c) {
 
   // Flight No
   const fnWrap=document.createElement('div'); fnWrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-  const fnLbl=document.createElement('div'); fnLbl.style.cssText=COL_S; fnLbl.textContent='Flight No.';
+  const fnLbl=document.createElement('div'); fnLbl.className='fld-lbl'; fnLbl.style.cssText=COL_S; fnLbl.textContent='Flight No.';
   const fnInp=document.createElement('input'); fnInp.type='text'; fnInp.inputMode='numeric';
   fnInp.value=fl.flightNum||''; fnInp.style.cssText=S+';width:76px;text-align:right';
   fnInp.addEventListener('change',e=>{ setFlight('flightNum',e.target.value); renderPreflight(c); });
@@ -3182,7 +3519,7 @@ function renderPreflight(c) {
 
   // Gate
   const gWrap=document.createElement('div'); gWrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-  const gLbl=document.createElement('div'); gLbl.style.cssText=COL_S; gLbl.textContent='Gate';
+  const gLbl=document.createElement('div'); gLbl.className='fld-lbl'; gLbl.style.cssText=COL_S; gLbl.textContent='Gate';
   const gateInp=document.createElement('input'); gateInp.type='text'; gateInp.inputMode='text';
   gateInp.value=fl.gate||''; gateInp.style.cssText=S+';width:62px;text-align:right';
   gateInp.addEventListener('change',e=>setFlight('gate',e.target.value));
@@ -3193,12 +3530,12 @@ function renderPreflight(c) {
   const acSel=sel('acType',acOpts,'90px');
   acSel.addEventListener('change',()=>{ setTimeout(()=>{ checkPTOW(); checkTailwind(calcWind().hw); },100); });
   const acWrap=document.createElement('div'); acWrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-  const acLbl=document.createElement('div'); acLbl.style.cssText=COL_S; acLbl.textContent='A/C Type';
+  const acLbl=document.createElement('div'); acLbl.className='fld-lbl'; acLbl.style.cssText=COL_S; acLbl.textContent='A/C Type';
   acWrap.appendChild(acLbl); acWrap.appendChild(acSel); fiCol.appendChild(acWrap);
 
   // ACFT Nose # — scraped or manual; shows N-number lookup
   const noseWrap=document.createElement('div'); noseWrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-  const noseLbl=document.createElement('div'); noseLbl.style.cssText=COL_S; noseLbl.textContent='ACFT Nose #';
+  const noseLbl=document.createElement('div'); noseLbl.className='fld-lbl'; noseLbl.style.cssText=COL_S; noseLbl.textContent='ACFT Nose #';
   const noseRow=document.createElement('div'); noseRow.style.cssText='display:flex;align-items:center;gap:5px';
   const noseInp=document.createElement('input'); noseInp.type='text'; noseInp.inputMode='text';
   noseInp.value=fl.acftNose||''; noseInp.placeholder='7AA'; noseInp.maxLength=4;
@@ -3277,7 +3614,7 @@ function renderPreflight(c) {
 
   // Enroute Time
   const etWrap=document.createElement('div'); etWrap.style.cssText='display:flex;flex-direction:column;gap:2px;align-items:center';
-  const etLbl=document.createElement('div'); etLbl.style.cssText=COL_S; etLbl.textContent='Enroute Time';
+  const etLbl=document.createElement('div'); etLbl.className='fld-lbl'; etLbl.style.cssText=COL_S; etLbl.textContent='Enroute Time';
   const etInp=document.createElement('input'); etInp.type='text'; etInp.inputMode='text';
   etInp.value=fl.enrouteTime||''; etInp.placeholder='00+00';
   etInp.style.cssText=S+';width:80px;text-align:center';
@@ -3286,7 +3623,7 @@ function renderPreflight(c) {
 
   // Dispatch Desk
   const ddWrap=document.createElement('div'); ddWrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-  const ddLbl=document.createElement('div'); ddLbl.style.cssText=COL_S; ddLbl.textContent='Dispatch Desk';
+  const ddLbl=document.createElement('div'); ddLbl.className='fld-lbl'; ddLbl.style.cssText=COL_S; ddLbl.textContent='Dispatch Desk';
   const ddRow=document.createElement('div'); ddRow.style.cssText='display:flex;align-items:center;gap:4px';
   const ddInp=document.createElement('input'); ddInp.type='text'; ddInp.inputMode='numeric';
   ddInp.value=fl.dispatchDesk||''; ddInp.maxLength=3; ddInp.style.cssText=S+';width:48px;text-align:right';
@@ -3342,7 +3679,7 @@ function renderPreflight(c) {
 
   const mkRouteRow = (rowLabel, cityKey, dateKey, timeKey, captureFn, altRow) => {
     const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:2px';
-    const rl=document.createElement('div'); rl.style.cssText=COL_S; rl.textContent=rowLabel; wrap.appendChild(rl);
+    const rl=document.createElement('div'); rl.className='fld-lbl'; rl.style.cssText=COL_S; rl.textContent=rowLabel; wrap.appendChild(rl);
     if (altRow) {
       const altInp=document.createElement('input'); altInp.type='text'; altInp.inputMode='text';
       altInp.value=fl.altCity||''; altInp.placeholder='ICAO'; altInp.maxLength=4;
@@ -3412,7 +3749,7 @@ function renderPreflight(c) {
     card.appendChild(top);
     const mkLine = (lbl, val) => { const r = document.createElement('div');
       r.style.cssText = 'display:flex;gap:6px;font-size:11px;font-family:SF Mono,monospace;color:var(--text2)';
-      const l = document.createElement('span'); l.textContent = lbl; l.style.cssText = COL_S + ';width:34px;margin:0';
+      const l = document.createElement('span'); l.textContent = lbl; l.className='fld-lbl'; l.style.cssText=COL_S + ';width:34px;margin:0';
       const v = document.createElement('span'); v.textContent = val; r.appendChild(l); r.appendChild(v); return r; };
     card.appendChild(mkLine('Dep', _when(fl.depDate, fl.depTime)));
     card.appendChild(mkLine('Arr', _when(fl.arrDate, fl.arrTime)));
@@ -3435,7 +3772,7 @@ function renderPreflight(c) {
   {
     const soulsRow=document.createElement('div'); soulsRow.style.cssText='display:flex;align-items:flex-end;gap:10px';
     const sw=document.createElement('div'); sw.style.cssText='display:flex;flex-direction:column;gap:2px';
-    const sl=document.createElement('div'); sl.style.cssText=COL_S; sl.textContent='Souls';
+    const sl=document.createElement('div'); sl.className='fld-lbl'; sl.style.cssText=COL_S; sl.textContent='Souls';
     sw.appendChild(sl); sw.appendChild(solInp);
     soulsRow.appendChild(sw);
     soulsRow.appendChild(etWrap);
@@ -3447,7 +3784,7 @@ function renderPreflight(c) {
     const distAltRow=document.createElement('div'); distAltRow.style.cssText='display:flex;align-items:flex-end;gap:10px';
     // Total Dist
     const dw=document.createElement('div'); dw.style.cssText='display:flex;flex-direction:column;gap:2px';
-    const dl=document.createElement('div'); dl.style.cssText=COL_S; dl.textContent='Total Dist';
+    const dl=document.createElement('div'); dl.className='fld-lbl'; dl.style.cssText=COL_S; dl.textContent='Total Dist';
     const di=document.createElement('input'); di.type='text'; di.inputMode='numeric'; di.value=fl.totalDist||''; di.placeholder='0000'; di.maxLength=5; di.style.cssText=S+';width:58px;text-align:right';
     di.addEventListener('change',e=>setFlight('totalDist',e.target.value));
     const dr=document.createElement('div'); dr.style.cssText='display:flex;align-items:flex-end;gap:4px';
@@ -3456,9 +3793,9 @@ function renderPreflight(c) {
     distAltRow.appendChild(dw);
     // Crossing ALT
     const aw=document.createElement('div'); aw.style.cssText='display:flex;flex-direction:column;gap:2px';
-    const al=document.createElement('div'); al.style.cssText=COL_S; al.textContent='Crossing ALT';
+    const al=document.createElement('div'); al.className='fld-lbl'; al.style.cssText=COL_S; al.textContent='Crossing ALT';
     const ai=document.createElement('input'); ai.type='text'; ai.inputMode='text'; ai.value=fl.crossingAlt||''; ai.placeholder='FL360'; ai.maxLength=6; ai.style.cssText=S+';width:58px;text-transform:uppercase';
-    ai.addEventListener('change',e=>setFlight('crossingAlt',e.target.value.toUpperCase()));
+    ai.addEventListener('change',e=>{ setFlight('crossingAltAuto',''); setFlight('crossingAlt',e.target.value.toUpperCase()); });
     ai.addEventListener('input',e=>{ e.target.value=e.target.value.toUpperCase(); });
     aw.appendChild(al); aw.appendChild(ai);
     distAltRow.appendChild(aw);
@@ -3556,6 +3893,7 @@ function renderPreflight(c) {
   // ── ATIS raw text — fills remaining space ──
   const atisRawDiv=document.createElement('div'); atisRawDiv.id='dep-atis-raw';
   atisRawDiv.contentEditable='true';
+  atisRawDiv.dataset.helpKey='atis text';   // help badge (.108)
   atisRawDiv.style.cssText='font-size:13px;color:var(--text2);background:var(--surf2);border-radius:5px;padding:6px 8px;line-height:1.5;flex:1;min-height:60px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;word-break:break-word;outline:none;cursor:text';
   atisRawDiv.textContent=fl.atisRaw||'Paste ATIS here\u2026';
   atisRawDiv.addEventListener('focus',()=>{ if(atisRawDiv.textContent==='Paste ATIS here\u2026') atisRawDiv.textContent=''; });
@@ -3657,7 +3995,7 @@ function renderPreflight(c) {
   xwVal.textContent=String(windCalc.xw).padStart(2,'0');
   if(windCalc.xw>15) setTimeout(()=>checkXwind(windCalc.xw),200);
   if(windCalc.hw<0)  setTimeout(()=>checkTailwind(windCalc.hw),200);
-  hwLbl       = document.createElement('div'); hwLbl.style.cssText=COL_S+';margin-bottom:3px'; hwLbl.textContent=windCalc.hw>=0?'Headwind':'Tailwind';
+  hwLbl       = document.createElement('div'); hwLbl.className='fld-lbl'; hwLbl.style.cssText=COL_S+';margin-bottom:3px'; hwLbl.textContent=windCalc.hw>=0?'Headwind':'Tailwind';
   hwVal       = document.createElement('div'); hwVal.style.cssText='padding:5px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);font-size:18px;font-family:SF Mono,monospace;text-align:center;width:48px';
   applyHwStyle(hwVal,windCalc.hw);
   hwVal.textContent=String(Math.abs(windCalc.hw)).padStart(2,'0');
@@ -3692,7 +4030,7 @@ function renderPreflight(c) {
     const rwyDropWrap = document.createElement('div');
     rwyDropWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px';
     const rwyDropLbl = document.createElement('div');
-    rwyDropLbl.style.cssText = COL_S;
+    rwyDropLbl.className='fld-lbl'; rwyDropLbl.style.cssText=COL_S;
     rwyDropLbl.textContent = 'RUNWAY';
     const rwyDrop = document.createElement('select');
     rwyDrop.style.cssText = S + ';width:100%;font-family:SF Mono,monospace;font-size:12px';
@@ -3742,14 +4080,14 @@ function renderPreflight(c) {
       const IS = 'padding:6px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-family:SF Mono,monospace;font-size:14px;font-weight:700;text-align:center;width:100%;box-sizing:border-box';
       const mkField = (label, placeholder, inputmode) => {
         const w = document.createElement('div'); w.style.cssText = 'display:flex;flex-direction:column;gap:3px';
-        const l = document.createElement('div'); l.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px'; l.textContent = label;
+        const l = document.createElement('div'); l.className = 'fld-lbl'; l.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px'; l.textContent = label;
         const i = document.createElement('input'); i.type = 'text'; i.inputMode = inputmode||'text';
         i.placeholder = placeholder; i.style.cssText = IS;
         w.appendChild(l); w.appendChild(i); return { wrap: w, inp: i };
       };
       const mkSel = (label, opts) => {
         const w = document.createElement('div'); w.style.cssText = 'display:flex;flex-direction:column;gap:3px';
-        const l = document.createElement('div'); l.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px'; l.textContent = label;
+        const l = document.createElement('div'); l.className = 'fld-lbl'; l.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px'; l.textContent = label;
         const s = document.createElement('select'); s.style.cssText = IS;
         opts.forEach(([v,t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); });
         w.appendChild(l); w.appendChild(s); return { wrap: w, sel: s };
@@ -4020,20 +4358,10 @@ function renderPreflight(c) {
   eprRow.appendChild(tpsBtn);
   const tpsSpacer=document.createElement('div'); tpsSpacer.style.cssText='width:10px;flex-shrink:0';
   eprRow.appendChild(tpsSpacer);
-  // Climb Ltd box after each landing distance (.100): O/W → pfOwClimbLtd,
-  // E/O → pfClimbLtd (the original single flag). Yes = red, No = green.
-  const mkClimbLtd = (key) => {
-    const on = !!fl[key];
-    const clt = document.createElement('input');
-    clt.type = 'text'; clt.readOnly = true; clt.value = on ? 'Yes' : 'No';
-    clt.style.cssText = S + ';width:58px;text-align:center;font-weight:800;cursor:pointer;-webkit-user-select:none;user-select:none;color:' + (on ? 'var(--red)' : 'var(--green)') + ';border-color:' + (on ? 'var(--red)' : 'var(--green)') + ';background:' + (on ? 'var(--red-l)' : 'var(--green-l)');
-    clt.addEventListener('click', () => setFlight(key, !fl[key]));
-    return ic('Climb Ltd', clt);
-  };
+  // Climb Ltd boxes removed in .107 — a hand-set Yes/No told the pilot nothing he
+  // did not already know. Revisit with the approach climb limit chart in hand.
   eprRow.appendChild(ic('O/W Landing', owLandInp));
-  eprRow.appendChild(mkClimbLtd('pfOwClimbLtd'));
   eprRow.appendChild(ic('E/O Landing', eoLandInp));
-  eprRow.appendChild(mkClimbLtd('pfClimbLtd'));
   pfCol.appendChild(eprRow);
   // Note under the row while either box shows a computed (not hand-typed) distance (.105)
   {
@@ -4129,7 +4457,9 @@ function renderPreflight(c) {
   const ptowLimit=(fl.acType||'777-200ER')==='777-300ER'?777.0:650.0;
   const ptowOver=parseFloat(fl.ptow||0)>ptowLimit;
   ptowInp.style.cssText=S+';width:68px;text-align:right'+(ptowOver?';color:var(--red)':'');
-  ptowInp.addEventListener('change',e=>{ setFlight('ptow',e.target.value); fl.ptow=e.target.value; ptowInp.style.color=(parseFloat(e.target.value)||0)>(((fl.acType||'777-200ER')==='777-300ER'?777:650))?'var(--red)':'var(--text)'; });
+  ptowInp.addEventListener('change',e=>{ setFlight('ptow',e.target.value); fl.ptow=e.target.value; ptowInp.style.color=(parseFloat(e.target.value)||0)>(((fl.acType||'777-200ER')==='777-300ER'?777:650))?'var(--red)':'var(--text)';
+    // ATOW is the assumed takeoff weight, always PTOW + 3.0 — keep the pair in step (.107)
+    const _pv=parseFloat(e.target.value); if(!isNaN(_pv)){ const _av=(_pv+3.0).toFixed(1); setFlight('atow',_av); atowInp.value=_av; fl.atow=_av; } });
 
   const towInp2=document.createElement('input'); towInp2.type='text'; towInp2.inputMode='decimal'; towInp2.value=fl.tow?(parseFloat(fl.tow).toFixed(1)):''; towInp2.placeholder='000.0';
   towInp2.addEventListener('blur',()=>{ const v=parseFloat(towInp2.value); if(!isNaN(v)) towInp2.value=v.toFixed(1); }); towInp2.style.cssText=S+';width:68px;text-align:right'; towInp2.addEventListener('change',e=>setFlight('tow',e.target.value));
@@ -4149,10 +4479,10 @@ function renderPreflight(c) {
     setFlight('atow',e.target.value);
     const atowVal = parseFloat(e.target.value);
     if (!isNaN(atowVal)) {
-      const ptowVal = (atowVal + 3.0).toFixed(1);
+      const ptowVal = (atowVal - 3.0).toFixed(1);
       setFlight('ptow', ptowVal);
       ptowInp.value = ptowVal;
-      ptowInp.style.color = (atowVal+3.0) > (((fl.acType||'777-200ER')==='777-300ER'?777:650)) ? 'var(--red)' : 'var(--green)';
+      ptowInp.style.color = (atowVal-3.0) > (((fl.acType||'777-200ER')==='777-300ER'?777:650)) ? 'var(--red)' : 'var(--green)';
       fl.ptow = ptowVal;
     }
   });
@@ -5531,7 +5861,7 @@ const now = new Date();
       N51.30.0W050.00.0 = 51.3N050W <span style="color:var(--text3)">(Voice)</span> = N5130.0W05000.0 <span style="color:var(--text3)">(FMS entry)</span> = 5250N <span style="color:var(--text3)">(Displayed)</span><br>
       <span style="display:inline-block;padding-left:9.5em">= H5150 <span style="color:var(--text3)">(Flight Plan)</span></span>
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-top:6px">* Waypoints must be expanded and visually verified during preflight RTE and LEGS check, upon receipt of oceanic clearance, and approaching an oceanic waypoint (first tick)</div>
+    <div style="font-size:12px;color:var(--text2);margin-top:6px">* Waypoints must be expanded and visually verified during the preflight LEGS check, upon receipt of oceanic clearance, and approaching an oceanic waypoint (first tick)</div>
   </div></div>`;
 
   // ── Body clock context (dynamic) ─────────────────────────────────────────
@@ -7717,20 +8047,20 @@ function renderArrival(c) {
       <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
         <div style="display:flex;align-items:flex-end;gap:6px">
           <div style="${fldS}">
-            <div style="${lblS}">ATIS</div>
+            <div class="fld-lbl" style="${lblS}">ATIS</div>
             <select id="arr-atis-sel" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:13px;width:62px" onchange="setFlight('arrAtis',this.value)">
               ${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l=>`<option value="${l}" ${(fl.arrAtis||'')+''===l?'selected':''}>${l}</option>`).join('')}
             </select>
           </div>
           <div style="display:flex;align-items:flex-end;gap:4px">
             <div style="${fldS}">
-              <div style="${lblS}">RWY</div>
+              <div class="fld-lbl" style="${lblS}">RWY</div>
               <select style="${inpS};width:52px" onchange="setFlight('arrRwyNum',this.value);setFlight('arrRwy',(this.value)+(currentFlight().arrRwyDir||''));recalcArrWind()">
                 ${Array.from({length:36},(_,i)=>String(i+1).padStart(2,'0')).map(n=>`<option value="${n}" ${(fl.arrRwyNum||fl.arrRwy&&fl.arrRwy.match(/^\d+/)?.[0].padStart(2,'0')||'')===n?'selected':''}>${n}</option>`).join('')}
               </select>
             </div>
             <div style="${fldS}">
-              <div style="${lblS}">&nbsp;</div>
+              <div class="fld-lbl" style="${lblS}">&nbsp;</div>
               <select style="${inpS};width:44px" onchange="setFlight('arrRwyDir',this.value);setFlight('arrRwy',(currentFlight().arrRwyNum||'')+(this.value));recalcArrWind()">
                 ${[['','−'],['L','L'],['R','R'],['C','C']].map(([v,l])=>`<option value="${v}" ${(fl.arrRwyDir||'')===(v)?'selected':''}>${l}</option>`).join('')}
               </select>
@@ -7740,37 +8070,38 @@ function renderArrival(c) {
         </div>
         <div style="display:flex;align-items:flex-end;gap:6px">
           <div style="${fldS}">
-            <div style="${lblS}">Temp / DP</div>
+            <div class="fld-lbl" style="${lblS}">Temp / DP</div>
             <div style="display:flex;align-items:center;gap:4px">
               <input id="arr-temp-inp" type="text" inputmode="numeric" value="${fl.arrTemp||''}" placeholder="00" style="${inpS}" onchange="setFlight('arrTemp',this.value);document.getElementById('arr-temp-f').textContent=this.value?(Math.round(parseFloat(this.value)*9/5+32)+'°F'):'—'">
-              <div id="arr-temp-f" style="font-size:11px;font-weight:600;color:var(--text2);padding:4px 5px;border-radius:5px;border:1px solid var(--border2);background:var(--surf3);white-space:nowrap">${fl.arrTemp?(Math.round(parseFloat(fl.arrTemp)*9/5+32)+'°F'):'—'}</div>
+              <div id="arr-temp-f" style="${inpS};background:var(--surf3);color:var(--text2);font-weight:600;white-space:nowrap">${fl.arrTemp?(Math.round(parseFloat(fl.arrTemp)*9/5+32)+'°F'):'—'}</div>
+              <div style="font-size:14px;font-weight:700;color:var(--text3);flex-shrink:0">/</div>
               <input id="arr-dew-inp" type="text" inputmode="numeric" value="${fl.arrDew||''}" placeholder="DP" style="${inpS}" onchange="setFlight('arrDew',this.value)">
             </div>
           </div>
           <div style="${fldS}">
-            <div style="${lblS}">QNH</div>
+            <div class="fld-lbl" style="${lblS}">QNH</div>
             <input id="arr-qnh-inp" type="text" inputmode="decimal" value="${fl.arrQnh||''}" placeholder="29.92" style="padding:5px 6px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:13px;width:68px;text-align:right" onchange="setFlight('arrQnh',this.value)">
           </div>
           <div style="${fldS}">
-            <div style="${lblS}">TRANS ALT</div>
+            <div class="fld-lbl" style="${lblS}">TRANS ALT</div>
             <input id="arr-transalt-inp" type="text" inputmode="text" value="${fl.arrTransAlt||''}" placeholder="18000" maxlength="6" style="padding:5px 6px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:13px;width:68px;text-align:right;text-transform:uppercase" onchange="setFlight('arrTransAltAuto','');setFlight('arrTransAlt',this.value.toUpperCase())" oninput="this.value=this.value.toUpperCase()">
           </div>
         </div>
         <div style="display:flex;align-items:flex-end;gap:6px">
           <div style="${fldS}">
-            <div style="${lblS}">Wind Dir</div>
+            <div class="fld-lbl" style="${lblS}">Wind Dir</div>
             <select id="arr-wdir-inp" style="${inpS};width:58px" onchange="setFlight('arrWindDir',this.value);recalcArrWind()">
               ${Array.from({length:37},(_,i)=>String(i*10).padStart(3,'0')).map(v=>`<option value="${v}" ${(fl.arrWindDir||'')===v?'selected':''}>${v}</option>`).join('')}
             </select>
           </div>
           <div style="${fldS}">
-            <div style="${lblS}">Kts</div>
+            <div class="fld-lbl" style="${lblS}">Kts</div>
             <select id="arr-wspd-inp" style="${inpS};width:48px" onchange="setFlight('arrWindSpd',this.value);recalcArrWind()">
               ${Array.from({length:61},(_,i)=>String(i)).map(v=>`<option value="${v}" ${(fl.arrWindSpd||'')==v?'selected':''}>${v}</option>`).join('')}
             </select>
           </div>
           <div style="${fldS}">
-            <div style="${lblS}">Gust</div>
+            <div class="fld-lbl" style="${lblS}">Gust</div>
             <input id="arr-gust-inp" type="text" inputmode="numeric" value="${fl.arrWindGust||''}" placeholder="G00" maxlength="3" style="${inpS};width:44px" onchange="setFlight('arrWindGust',this.value)">
           </div>
           <div id="arr-xwind-display" style="margin-top:4px"><div style="font-size:10px;color:var(--text3)">Enter RWY + Wind for crosswind calc</div></div>
@@ -7780,7 +8111,7 @@ function renderArrival(c) {
         <div style="display:flex;justify-content:flex-end">
           <button id="arr-atis-clear" style="padding:3px 8px;border-radius:5px;border:1px solid var(--border2);background:var(--surf2);color:var(--text3);font-size:11px;font-weight:600;cursor:pointer">Clear</button>
         </div>
-        <div style="position:relative;flex:1;display:flex;flex-direction:column;min-height:60px"><div id="arr-atis-raw" contenteditable="true" style="flex:1;font-size:11px;color:var(--text2);background:var(--surf2);border-radius:5px;padding:6px 8px;line-height:1.5;min-height:60px;overflow-y:auto;max-height:160px;word-break:break-word;outline:none;cursor:text">${fl.arrAtisRaw||'Paste ATIS here…'}</div><span class="atis-age" data-src="arr-atis-raw" style="position:absolute;top:6px;right:8px;pointer-events:none;background:var(--surf2);font-size:11px;font-weight:800;font-family:SF Mono,monospace;padding:2px 7px;border-radius:5px;border:1px solid;white-space:nowrap;display:none"></span></div>
+        <div style="position:relative;flex:1;display:flex;flex-direction:column;min-height:60px"><div id="arr-atis-raw" data-help-key="atis text" contenteditable="true" style="flex:1;font-size:11px;color:var(--text2);background:var(--surf2);border-radius:5px;padding:6px 8px;line-height:1.5;min-height:60px;overflow-y:auto;max-height:160px;word-break:break-word;outline:none;cursor:text">${fl.arrAtisRaw||'Paste ATIS here…'}</div><span class="atis-age" data-src="arr-atis-raw" style="position:absolute;top:6px;right:8px;pointer-events:none;background:var(--surf2);font-size:11px;font-weight:800;font-family:SF Mono,monospace;padding:2px 7px;border-radius:5px;border:1px solid;white-space:nowrap;display:none"></span></div>
       </div>
     </div>
   </div>`;
@@ -7812,20 +8143,17 @@ function renderArrival(c) {
     const cmp = (!isNaN(lw) && !isNaN(mlw)) ? (lw > mlw ? 'var(--red)' : 'var(--green)') : '';
     const bS = 'padding:6px 6px;border-radius:7px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:16px;font-weight:700;font-family:SF Mono,monospace;width:100%;box-sizing:border-box;text-align:center';
     const lS2 = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap';
-    const fld = (key, label, ph, extra) => '<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><div style="' + lS2 + '">' + label + '</div>'
+    const fld = (key, label, ph, extra) => '<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><div class="fld-lbl" style="' + lS2 + '">' + label + '</div>'
       + '<input type="text" inputmode="decimal" maxlength="6" placeholder="' + ph + '" value="' + esc(fl[key]) + '" style="' + bS + (extra || '') + '" oninput="setFlightQuiet(\'' + key + '\', this.value.trim())" onchange="setFlight(\'' + key + '\', this.value.trim())"></div>';
-    const clOn = !!fl.arrClimbLtd;
     var _arrLdgBoxes = '<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:8px;padding:10px 12px;align-items:flex-end">'
       + fld('arrLdgDist', 'Ldg Dist ft', '0000')
-      + '<div style="display:flex;flex-direction:column;gap:3px;flex:0.8;min-width:0"><div style="' + lS2 + '">Climb Ltd</div>'
-      + '<input type="text" readonly value="' + (clOn ? 'Yes' : 'No') + '" onclick="setFlight(\'arrClimbLtd\', ' + (clOn ? 'false' : 'true') + ')" style="' + bS + ';cursor:pointer;-webkit-user-select:none;user-select:none;color:' + (clOn ? 'var(--red)' : 'var(--green)') + ';border-color:' + (clOn ? 'var(--red)' : 'var(--green)') + ';background:' + (clOn ? 'var(--red-l)' : 'var(--green-l)') + '"></div>'
-      + '<div style="display:flex;flex-direction:column;gap:3px;flex:1.6;min-width:0"><div style="' + lS2 + '">Ldg Wt' + (lwIsPrefill ? ' <span style="text-transform:none;font-weight:600">(Disp \u2212 burn)</span>' : '') + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:3px;flex:1.6;min-width:0"><div class="fld-lbl" style="' + lS2 + '">Ldg Wt' + (lwIsPrefill ? ' <span style="text-transform:none;font-weight:600">(Disp \u2212 burn)</span>' : '') + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px">'
       + '<button onclick="adjustArrLdgWt(-1)" style="padding:4px 9px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0">\u2212</button>'
       + '<input type="text" inputmode="decimal" maxlength="6" placeholder="000.0" value="' + esc(lwVal) + '" style="' + bS + (cmp ? ';color:' + cmp + ';border-color:' + cmp : '') + '" onfocus="this.select()" onchange="setFlight(\'arrLdgWt\', this.value.trim())">'
       + '<button onclick="adjustArrLdgWt(1)" style="padding:4px 9px;border-radius:6px;border:1px solid var(--border2);background:var(--surf2);color:var(--text);font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0">+</button>'
       + '</div></div>'
-      + '<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><div style="' + lS2 + '">Max Ldg Wt' + (!String(fl.arrMlw || '').trim() ? ' <span style="text-transform:none;font-weight:600">(' + acLimits(fl).tag + ')</span>' : '') + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><div class="fld-lbl" style="' + lS2 + '">Max Ldg Wt' + (!String(fl.arrMlw || '').trim() ? ' <span style="text-transform:none;font-weight:600">(' + acLimits(fl).tag + ')</span>' : '') + '</div>'
       + '<input type="text" inputmode="decimal" maxlength="6" placeholder="000.0" value="' + esc(mlwVal) + '" style="' + bS + '" onfocus="this.select()" onchange="setFlight(\'arrMlw\', this.value.trim())"></div>'
       + '</div></div>';
   }
@@ -7872,8 +8200,8 @@ function renderArrival(c) {
   html += `<div class="card" style="flex:1;min-width:0">
     <div class="card-hdr"><div class="card-hdr-left"><div class="card-dot" style="background:var(--blue)"></div><div class="card-title">Wind and X-Wind Limits</div></div></div>`;
   html += '<div style="display:flex;align-items:center;padding:6px 10px;background:var(--surf3);border-bottom:1px solid var(--border)">'
-    + '<div style="' + colS + ';width:26px;flex-shrink:0;text-align:center">RCC</div>'
-    + '<div style="' + colS + ';flex:1;min-width:0;padding-left:6px">PIREP / Surface</div>'
+    + '<div class="fld-lbl" style="' + colS + ';width:26px;flex-shrink:0;text-align:center">RCC</div>'
+    + '<div class="fld-lbl" style="' + colS + ';flex:1;min-width:0;padding-left:6px">PIREP / Surface</div>'
     + '<div style="' + colS + ';width:54px;flex-shrink:0;text-align:right">X-Wind</div>'
     + '</div>';
   rccRows.forEach((row, i) => {
@@ -8538,6 +8866,7 @@ updateClock();
 setInterval(updateClock, 30000);
 setInterval(updateDepInTimer, 10000);
 render();
+uiStartObserver();   // decorate popups built outside render() (.106)
 // Silently preload reference guide images for offline use
 setTimeout(preloadRefGuide, 1500);
 window.addEventListener('online',  () => { document.getElementById('offline-bar').style.display='none'; });
@@ -9340,7 +9669,7 @@ function showCDIViewer() {
     const ppRow = document.createElement('div'); ppRow.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding-top:4px';
     const mkField = (labelTxt, key, placeholder, inputMode) => {
       const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px';
-      const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px';
+      const lbl = document.createElement('div'); lbl.className = 'fld-lbl'; lbl.style.cssText = 'font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px';
       lbl.textContent = labelTxt;
       const inp = document.createElement('input');
       inp.type = 'text'; inp.inputMode = inputMode || 'text'; inp.placeholder = placeholder || '';
@@ -9757,7 +10086,7 @@ function showFlightPlanLoader() {
       delete result.fieldReports;
     }
     // Apply all other parsed fields
-    Object.entries(result).forEach(([k, v]) => { if (v !== null && v !== undefined && v !== '') setFlight(k, String(v)); });
+    Object.entries(result).forEach(([k, v]) => { if (k === 'crossingAlt') return; if (v !== null && v !== undefined && v !== '') setFlight(k, String(v)); });
     // A plan with a crew block resets boxes 1–3, so a re-used slot can't keep a stale third pilot (.99)
     if (result.crewBlockFound) ['crewN1','crewN2','crewN3'].forEach(k => { if (!result[k]) setFlight(k, ''); });
     // Runway dropdown compares the index numerically — and a new plan must
@@ -9774,6 +10103,13 @@ function showFlightPlanLoader() {
       };
       apply('tranAlt', 'tranAltAuto', result.depIcao);
       apply('arrTransAlt', 'arrTransAltAuto', result.arrIcao);
+      // Crossing ALT follows the same rule (.107): the parser's value from the
+      // first ORV waypoint fills an empty box or replaces an earlier prefill,
+      // but never overwrites a level the pilot typed.
+      if (result.crossingAlt && (!f2.crossingAlt || f2.crossingAltAuto)) {
+        setFlight('crossingAlt', String(result.crossingAlt));
+        setFlight('crossingAltAuto', '1');
+      }
     }
     const count = Object.keys(result).length;
     showFplStatus('✓ Filled ' + count + ' fields from flight plan.', 'success');
